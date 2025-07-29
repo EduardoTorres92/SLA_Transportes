@@ -139,7 +139,7 @@ def criar_timeline_entrega(row):
     
     # 3. Previsão de Entrega - usar coluna Lead Time
     lead_time = row.get('Lead Time', None)
-    duracao_previsao = f"{int(lead_time)} dias" if pd.notna(lead_time) else None
+    duracao_previsao = f"{int(lead_time)} dias úteis" if pd.notna(lead_time) else None
     
     # 4. Entrega Realizada - Nota Fiscal Emitida até Entrega Realizada (DIAS ÚTEIS)
     if pd.notna(dt_nota_calc) and pd.notna(dt_entrega_calc):
@@ -1854,10 +1854,16 @@ if sla is not None:
                                 value=str(row.get('Status', 'N/A'))
                             )
                         
-                        # Métrica da Ocorrência fora das sub-colunas
+                        # Métrica do Lead Time fora das sub-colunas
+                        lead_time_valor = row.get('Lead Time', 'N/A')
+                        if pd.notna(lead_time_valor) and lead_time_valor != 'N/A':
+                            lead_time_formatado = f"{int(lead_time_valor)} dias"
+                        else:
+                            lead_time_formatado = 'N/A'
+                        
                         st.metric(
-                            label="⚠️ Ocorrência",
-                            value=str(row.get('Ocorrência', 'N/A'))[:30] + "..." if len(str(row.get('Ocorrência', 'N/A'))) > 30 else str(row.get('Ocorrência', 'N/A'))
+                            label="⏱️ Lead Time",
+                            value=lead_time_formatado
                         )
                     
                     # Separador entre resultados se houver múltiplas NFs
