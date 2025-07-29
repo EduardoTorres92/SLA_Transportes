@@ -145,8 +145,17 @@ def criar_timeline_entrega(row):
     if pd.notna(dt_nota_calc) and pd.notna(dt_entrega_calc):
         dias_uteis_total = calcular_dias_uteis(dt_nota_calc, dt_entrega_calc)
         duracao_entrega = f"{dias_uteis_total} dias úteis" if dias_uteis_total is not None else None
+        
+        # Calcular também em dias corridos para a soma total
+        dias_corridos_entrega = calcular_dias_corridos(dt_nota_calc, dt_entrega_calc)
     else:
         duracao_entrega = None
+        dias_corridos_entrega = None
+    
+    # Calcular soma total real (dias corridos)
+    soma_real_dias = None
+    if pd.notna(dias_faturamento) and dias_despacho is not None and dias_corridos_entrega is not None:
+        soma_real_dias = int(dias_faturamento) + dias_despacho + dias_corridos_entrega
     
     # Definir etapas da timeline com durações
     etapas = [
@@ -180,7 +189,7 @@ def criar_timeline_entrega(row):
         }
     ]
     
-    return etapas
+    return etapas, soma_real_dias
 
 # Função para carregar dados do arquivo carregado
 @st.cache_data
@@ -1746,7 +1755,7 @@ if sla is not None:
                         st.markdown("#### 🚛 Rastreamento da Entrega")
                         
                         # Exibir timeline usando componentes nativos do Streamlit
-                        etapas = criar_timeline_entrega(row)
+                        etapas, soma_real_dias = criar_timeline_entrega(row)
                         
                         for i, etapa in enumerate(etapas):
                             # Definir cores baseadas no status
@@ -1854,17 +1863,42 @@ if sla is not None:
                                 value=str(row.get('Status', 'N/A'))
                             )
                         
-                        # Métrica do Lead Time fora das sub-colunas
-                        lead_time_valor = row.get('Lead Time', 'N/A')
-                        if pd.notna(lead_time_valor) and lead_time_valor != 'N/A':
-                            lead_time_formatado = f"{int(lead_time_valor)} dias"
-                        else:
-                            lead_time_formatado = 'N/A'
+                        # Métricas de tempo
+                        col_lead, col_real = st.columns(2)
                         
-                        st.metric(
-                            label="⏱️ Lead Time",
-                            value=lead_time_formatado
-                        )
+                        with col_lead:
+                            # Lead Time (previsto)
+                            lead_time_valor = row.get('Lead Time', 'N/A')
+                            if pd.notna(lead_time_valor) and lead_time_valor != 'N/A':
+                                lead_time_formatado = f"{int(lead_time_valor)} dias"
+                            else:
+                                lead_time_formatado = 'N/A'
+                            
+                            st.metric(
+                                label="⏱️ Lead Time (Previsto)",
+                                value=lead_time_formatado
+                            )
+                        
+                        with col_real:
+                            # Tempo Real (soma das etapas)
+                            if soma_real_dias is not None:
+                                tempo_real_formatado = f"{soma_real_dias} dias"
+                                # Calcular diferença vs Lead Time para mostrar delta
+                                if pd.notna(lead_time_valor) and lead_time_valor != 'N/A':
+                                    diferenca = soma_real_dias - int(lead_time_valor)
+                                    delta_texto = f"{diferenca:+d}" if diferenca != 0 else "0"
+                                else:
+                                    delta_texto = None
+                            else:
+                                tempo_real_formatado = 'N/A'
+                                delta_texto = None
+                            
+                            st.metric(
+                                label="🕐 Tempo Real (Corridos)",
+                                value=tempo_real_formatado,
+                                delta=delta_texto,
+                                help="Soma de: Faturamento + Despacho + Entrega (dias corridos)"
+                            )
                     
                     # Separador entre resultados se houver múltiplas NFs
                     if len(resultado) > 1:
