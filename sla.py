@@ -1880,23 +1880,15 @@ if sla is not None:
                             )
                         
                         with col_real:
-                            # Tempo Real (soma das etapas)
+                            # Tempo Total (soma das etapas)
                             if soma_real_dias is not None:
-                                tempo_real_formatado = f"{soma_real_dias} dias"
-                                # Calcular diferença vs Lead Time para mostrar delta
-                                if pd.notna(lead_time_valor) and lead_time_valor != 'N/A':
-                                    diferenca = soma_real_dias - int(lead_time_valor)
-                                    delta_texto = f"{diferenca:+d}" if diferenca != 0 else "0"
-                                else:
-                                    delta_texto = None
+                                tempo_total_formatado = f"{soma_real_dias} dias"
                             else:
-                                tempo_real_formatado = 'N/A'
-                                delta_texto = None
+                                tempo_total_formatado = 'N/A'
                             
                             st.metric(
-                                label="🕐 Tempo Real (Corridos)",
-                                value=tempo_real_formatado,
-                                delta=delta_texto,
+                                label="🕐 Tempo Total",
+                                value=tempo_total_formatado,
                                 help="Soma de: Faturamento + Despacho + Entrega (dias corridos)"
                             )
                     
