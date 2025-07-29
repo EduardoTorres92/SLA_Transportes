@@ -115,6 +115,7 @@ def criar_timeline_entrega(row):
             return None
     
     # Extrair e formatar as datas
+    dt_implant = format_date_timeline(row.get('Dt Implant Ped'))
     dt_nota = format_date_timeline(row.get('Dt Nota Fiscal'))
     dt_saida = format_date_timeline(row.get('Data de Saída'))
     dt_previsao = format_date_timeline(row.get('Previsão de Entrega'))
@@ -159,6 +160,13 @@ def criar_timeline_entrega(row):
     
     # Definir etapas da timeline com durações
     etapas = [
+        {
+            'titulo': '📝 Implantação do Pedido',
+            'data': dt_implant,
+            'duracao': None,  # Sem cálculo de dias, apenas a data
+            'status': 'concluido' if dt_implant else 'pendente',
+            'icon': '✅' if dt_implant else '⭕'
+        },
         {
             'titulo': '📋 Nota Fiscal Emitida',
             'data': dt_nota,
@@ -1779,7 +1787,7 @@ if sla is not None:
                                 info_adicional = []
                                 if data_texto != 'Não informado':
                                     info_adicional.append(data_texto)
-                                if duracao_texto:
+                                if duracao_texto and duracao_texto != 'None':
                                     info_adicional.append(f"⏱️ {duracao_texto}")
                                 
                                 texto_completo = " • ".join(info_adicional) if info_adicional else "Não informado"
