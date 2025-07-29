@@ -54,6 +54,28 @@ def ajustar_posicao_texto(valores, threshold_percent=5):
     
     return posicoes, cores
 
+def calcular_dias_uteis(data_inicio, data_fim):
+    """
+    Calcula o número de dias úteis entre duas datas
+    """
+    if pd.isna(data_inicio) or pd.isna(data_fim):
+        return None
+    
+    try:
+        # Converter para datetime se necessário
+        if isinstance(data_inicio, str):
+            data_inicio = pd.to_datetime(data_inicio, errors='coerce')
+        if isinstance(data_fim, str):
+            data_fim = pd.to_datetime(data_fim, errors='coerce')
+        
+        if pd.isna(data_inicio) or pd.isna(data_fim):
+            return None
+        
+        # Usar pandas para calcular dias úteis (excluindo sábados e domingos)
+        return pd.bdate_range(start=data_inicio, end=data_fim).shape[0] - 1
+    except:
+        return None
+
 def criar_timeline_entrega(row):
     """
     Cria uma timeline visual estilo correios usando componentes nativos do Streamlit
@@ -75,35 +97,85 @@ def criar_timeline_entrega(row):
         except:
             return None
     
+    # Função para calcular diferença em dias corridos
+    def calcular_dias_corridos(data_inicio, data_fim):
+        if pd.isna(data_inicio) or pd.isna(data_fim):
+            return None
+        try:
+            if isinstance(data_inicio, str):
+                data_inicio = pd.to_datetime(data_inicio, errors='coerce')
+            if isinstance(data_fim, str):
+                data_fim = pd.to_datetime(data_fim, errors='coerce')
+            
+            if pd.isna(data_inicio) or pd.isna(data_fim):
+                return None
+            
+            return (data_fim - data_inicio).days
+        except:
+            return None
+    
     # Extrair e formatar as datas
     dt_nota = format_date_timeline(row.get('Dt Nota Fiscal'))
     dt_saida = format_date_timeline(row.get('Data de Saída'))
     dt_previsao = format_date_timeline(row.get('Previsão de Entrega'))
     dt_entrega = format_date_timeline(row.get('Data de Entrega'))
     
-    # Definir etapas da timeline
+    # Extrair datas para cálculos (sem formatação)
+    dt_nota_calc = pd.to_datetime(row.get('Dt Nota Fiscal'), errors='coerce')
+    dt_saida_calc = pd.to_datetime(row.get('Data de Saída'), errors='coerce')
+    dt_romaneio_calc = pd.to_datetime(row.get('Data de Romaneio'), errors='coerce')
+    dt_entrega_calc = pd.to_datetime(row.get('Data de Entrega'), errors='coerce')
+    
+    # Calcular durações
+    # 1. Nota Fiscal Emitida - usar coluna Dias Faturamento
+    dias_faturamento = row.get('Dias Faturamento', None)
+    duracao_nota = f"{int(dias_faturamento)} dias" if pd.notna(dias_faturamento) else None
+    
+    # 2. Mercadoria Despachada - Data da emissão da nota fiscal x data do romaneio
+    if pd.notna(dt_nota_calc) and pd.notna(dt_romaneio_calc):
+        dias_despacho = calcular_dias_corridos(dt_nota_calc, dt_romaneio_calc)
+        duracao_despacho = f"{dias_despacho} dias" if dias_despacho is not None else None
+    else:
+        duracao_despacho = None
+    
+    # 3. Previsão de Entrega - usar coluna Lead Time
+    lead_time = row.get('Lead Time', None)
+    duracao_previsao = f"{int(lead_time)} dias" if pd.notna(lead_time) else None
+    
+    # 4. Entrega Realizada - Nota Fiscal Emitida até Entrega Realizada (DIAS ÚTEIS)
+    if pd.notna(dt_nota_calc) and pd.notna(dt_entrega_calc):
+        dias_uteis_total = calcular_dias_uteis(dt_nota_calc, dt_entrega_calc)
+        duracao_entrega = f"{dias_uteis_total} dias úteis" if dias_uteis_total is not None else None
+    else:
+        duracao_entrega = None
+    
+    # Definir etapas da timeline com durações
     etapas = [
         {
             'titulo': '📋 Nota Fiscal Emitida',
             'data': dt_nota,
+            'duracao': duracao_nota,
             'status': 'concluido' if dt_nota else 'pendente',
             'icon': '✅' if dt_nota else '⭕'
         },
         {
             'titulo': '🚚 Mercadoria Despachada',
             'data': dt_saida,
+            'duracao': duracao_despacho,
             'status': 'concluido' if dt_saida else 'pendente',
             'icon': '✅' if dt_saida else '⭕'
         },
         {
             'titulo': '🎯 Previsão de Entrega',
             'data': dt_previsao,
+            'duracao': duracao_previsao,
             'status': 'concluido' if dt_previsao else 'pendente',
             'icon': '✅' if dt_previsao else '⭕'
         },
         {
             'titulo': '✅ Entrega Realizada',
             'data': dt_entrega,
+            'duracao': duracao_entrega,
             'status': 'concluido' if dt_entrega else 'pendente',
             'icon': '✅' if dt_entrega else '⭕'
         }
@@ -1693,6 +1765,16 @@ if sla is not None:
                             with container:
                                 # Usar HTML simples para melhor controle visual
                                 data_texto = etapa['data'] if etapa['data'] else 'Não informado'
+                                duracao_texto = etapa.get('duracao', None)
+                                
+                                # Criar texto da duração se disponível
+                                info_adicional = []
+                                if data_texto != 'Não informado':
+                                    info_adicional.append(data_texto)
+                                if duracao_texto:
+                                    info_adicional.append(f"⏱️ {duracao_texto}")
+                                
+                                texto_completo = " • ".join(info_adicional) if info_adicional else "Não informado"
                                 
                                 etapa_html = f"""
                                 <div style="
@@ -1726,7 +1808,7 @@ if sla is not None:
                                             font-size: 13px;
                                             opacity: 0.8;
                                         ">
-                                            {data_texto}
+                                            {texto_completo}
                                         </div>
                                     </div>
                                 </div>
