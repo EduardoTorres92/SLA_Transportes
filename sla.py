@@ -7,13 +7,13 @@ from plotly.subplots import make_subplots
 
 # Configuração da página
 st.set_page_config(
-    page_title="Buscador de NF - SLA",
+    page_title="Dashboard Transportes",
     page_icon="📦",
     layout="wide"
 )
 
 # Título da aplicação
-st.title("📦 Buscador de Nota Fiscal - SLA")
+st.title("📦 Dashboard Transportes")
 st.markdown("---")
 
 # Função para ordenar meses cronologicamente
