@@ -123,7 +123,6 @@ def criar_timeline_entrega(row):
     # Extrair datas para cálculos (sem formatação)
     dt_nota_calc = pd.to_datetime(row.get('Dt Nota Fiscal'), errors='coerce')
     dt_saida_calc = pd.to_datetime(row.get('Data de Saída'), errors='coerce')
-    dt_romaneio_calc = pd.to_datetime(row.get('Data de Romaneio'), errors='coerce')
     dt_entrega_calc = pd.to_datetime(row.get('Data de Entrega'), errors='coerce')
     
     # Calcular durações
@@ -131,9 +130,9 @@ def criar_timeline_entrega(row):
     dias_faturamento = row.get('Dias Faturamento', None)
     duracao_nota = f"{int(dias_faturamento)} dias" if pd.notna(dias_faturamento) else None
     
-    # 2. Mercadoria Despachada - Data da emissão da nota fiscal x data do romaneio
-    if pd.notna(dt_nota_calc) and pd.notna(dt_romaneio_calc):
-        dias_despacho = calcular_dias_corridos(dt_nota_calc, dt_romaneio_calc)
+    # 2. Mercadoria Despachada - Data da emissão da nota fiscal x data de saída
+    if pd.notna(dt_nota_calc) and pd.notna(dt_saida_calc):
+        dias_despacho = calcular_dias_corridos(dt_nota_calc, dt_saida_calc)
         duracao_despacho = f"{dias_despacho} dias" if dias_despacho is not None else None
     else:
         duracao_despacho = None
