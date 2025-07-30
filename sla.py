@@ -997,7 +997,7 @@ if sla is not None:
                 # Verificar se as colunas necessárias existem
                 if all(col in sla.columns for col in ['Receita', 'Seq. De Fat']):
                     # Filtrar apenas registros com Receita = SIM
-                    dados_receita = sla[sla['Receita'] == 'SIM'].copy()
+                    dados_receita = sla[sla['Receita'] == 'Sim'].copy()
                     
                     if not dados_receita.empty:
                         st.success(f"✅ Encontrados {len(dados_receita):,} registros com Receita = SIM")
