@@ -255,7 +255,8 @@ if uploaded_file is not None:
             st.markdown("### 🔍 Validação das Colunas")
             colunas_essenciais = [
                 'Numero', 'Status', 'Transportador', 'Data de Entrega', 
-                'Previsão de Entrega', 'Dt Nota Fiscal', 'Unid Negoc'
+                'Previsão de Entrega', 'Dt Nota Fiscal', 'Unid Negoc',
+                'Receita', 'Seq. De Fat'
             ]
             
             col_val1, col_val2 = st.columns(2)
@@ -937,7 +938,7 @@ if sla is not None:
             st.success(f"✅ Dados carregados com sucesso! Total de {len(sla)} registros")
             
             # ===== ABAS DE VOLUMETRIA =====
-            tab_estado, tab_regiao = st.tabs(["🗺️ Por Estado", "🌎 Por Região"])
+            tab_estado, tab_regiao, tab_contagem = st.tabs(["🗺️ Por Estado", "🌎 Por Região", "📊 Contagem de Notas"])
             
             with tab_estado:
                 st.markdown("### 📍 Análise por Estado")
@@ -988,6 +989,167 @@ if sla is not None:
                         st.info("📊 Dados de Transportador não disponíveis")
                 else:
                     st.info("📊 Coluna Transportador não encontrada")
+                    
+            with tab_contagem:
+                st.markdown("### 📊 Contagem de Notas")
+                st.markdown("Análise baseada na coluna Receita = SIM usando Seq. De Fat")
+                
+                # Verificar se as colunas necessárias existem
+                if all(col in sla.columns for col in ['Receita', 'Seq. De Fat']):
+                    # Filtrar apenas registros com Receita = SIM
+                    dados_receita = sla[sla['Receita'] == 'SIM'].copy()
+                    
+                    if not dados_receita.empty:
+                        st.success(f"✅ Encontrados {len(dados_receita):,} registros com Receita = SIM")
+                        
+                        # Contagem por Seq. De Fat
+                        contagem_seq = dados_receita['Seq. De Fat'].value_counts().sort_index()
+                        
+                        if not contagem_seq.empty:
+                            # Calcular percentuais
+                            total_notas = len(dados_receita)
+                            percentuais = (contagem_seq.values / total_notas * 100).round(2)
+                            
+                            # Criar DataFrame para exibição similar à imagem
+                            tabela_contagem = pd.DataFrame({
+                                'Rótulos de Linha': contagem_seq.index,
+                                'Quantidade': contagem_seq.values,
+                                'Percentual': [f"{pct:.2f}%" for pct in percentuais]
+                            })
+                            
+                            # Adicionar linha de total
+                            linha_total = pd.DataFrame({
+                                'Rótulos de Linha': ['Total Geral'],
+                                'Quantidade': [total_notas],
+                                'Percentual': ['100.00%']
+                            })
+                            tabela_final = pd.concat([tabela_contagem, linha_total], ignore_index=True)
+                            
+                            # Exibir métricas principais
+                            col1, col2, col3 = st.columns(3)
+                            
+                            with col1:
+                                st.metric("📊 Total de Notas", f"{total_notas:,}")
+                                
+                            with col2:
+                                seq_mais_comum = contagem_seq.index[0]
+                                st.metric("🔢 Seq. Mais Comum", seq_mais_comum)
+                                
+                            with col3:
+                                maior_percentual = percentuais[0]
+                                st.metric("📈 Maior Concentração", f"{maior_percentual:.2f}%")
+                            
+                            # Gráfico de barras
+                            if len(contagem_seq) <= 20:  # Mostrar gráfico apenas se não houver muitos valores
+                                fig_contagem = px.bar(
+                                    x=contagem_seq.index.astype(str),
+                                    y=contagem_seq.values,
+                                    title="📊 Distribuição por Seq. De Fat",
+                                    labels={'x': 'Seq. De Fat', 'y': 'Quantidade de Notas'},
+                                    text=contagem_seq.values
+                                )
+                                fig_contagem.update_traces(
+                                    textposition='outside',
+                                    hovertemplate='<b>Seq. %{x}</b><br>Quantidade: %{y}<br>Percentual: %{customdata:.2f}%<extra></extra>',
+                                    customdata=percentuais
+                                )
+                                fig_contagem.update_layout(height=500, showlegend=False)
+                                st.plotly_chart(fig_contagem, use_container_width=True)
+                            
+                            # Tabela detalhada estilizada
+                            st.markdown("### 📋 Tabela Detalhada - Contagem de Notas")
+                            
+                            # Estilizar a tabela
+                            def estilizar_tabela(df):
+                                def aplicar_estilo(row):
+                                    if row['Rótulos de Linha'] == 'Total Geral':
+                                        return ['background-color: #2E86AB; color: white; font-weight: bold;'] * len(row)
+                                    else:
+                                        return [''] * len(row)
+                                return df.style.apply(aplicar_estilo, axis=1)
+                            
+                            st.dataframe(
+                                estilizar_tabela(tabela_final),
+                                use_container_width=True,
+                                hide_index=True
+                            )
+                            
+                            # Análise adicional por Unidade de Negócio (se disponível)
+                            if 'Unid Negoc' in dados_receita.columns:
+                                st.markdown("### 🏢 Análise por Unidade de Negócio")
+                                
+                                # Contagem cruzada: Unid Negoc vs Seq. De Fat
+                                tabela_cruzada = pd.crosstab(
+                                    dados_receita['Unid Negoc'], 
+                                    dados_receita['Seq. De Fat'], 
+                                    margins=True
+                                )
+                                
+                                # Calcular percentuais por linha (por unidade de negócio)
+                                tabela_percentual = pd.crosstab(
+                                    dados_receita['Unid Negoc'], 
+                                    dados_receita['Seq. De Fat'], 
+                                    normalize='index'
+                                ) * 100
+                                
+                                # Exibir contagem absoluta
+                                with st.expander("📊 Contagem Absoluta por Unidade de Negócio"):
+                                    st.dataframe(tabela_cruzada, use_container_width=True)
+                                
+                                # Exibir percentuais
+                                with st.expander("📈 Percentuais por Unidade de Negócio"):
+                                    # Formatar percentuais
+                                    tabela_perc_formatada = tabela_percentual.round(2).astype(str) + '%'
+                                    st.dataframe(tabela_perc_formatada, use_container_width=True)
+                            
+                            # Insights automáticos
+                            st.markdown("### 💡 Insights da Análise")
+                            
+                            concentracao_top3 = sum(sorted(percentuais, reverse=True)[:3])
+                            diversidade = len(contagem_seq)
+                            
+                            if maior_percentual > 50:
+                                st.warning(f"""
+                                **⚠️ Alta Concentração Detectada:**
+                                - Seq. {seq_mais_comum} representa {maior_percentual:.1f}% das notas
+                                - Concentração elevada pode indicar dependência de um processo específico
+                                - Top 3 Seq. representam {concentracao_top3:.1f}% do total
+                                """)
+                            elif concentracao_top3 > 80:
+                                st.info(f"""
+                                **📊 Concentração Moderada:**
+                                - Top 3 Seq. representam {concentracao_top3:.1f}% das notas
+                                - Distribuição razoavelmente equilibrada
+                                - {diversidade} sequências diferentes identificadas
+                                """)
+                            else:
+                                st.success(f"""
+                                **✅ Distribuição Equilibrada:**
+                                - Boa diversificação entre as sequências
+                                - Top 3 representam apenas {concentracao_top3:.1f}% do total
+                                - {diversidade} sequências diferentes ativas
+                                """)
+                        else:
+                            st.info("📊 Nenhuma sequência encontrada nos dados filtrados")
+                    else:
+                        st.warning("⚠️ Nenhum registro encontrado com Receita = SIM")
+                        
+                        # Mostrar valores únicos da coluna Receita para debug
+                        if 'Receita' in sla.columns:
+                            valores_receita = sla['Receita'].value_counts()
+                            st.write("**Valores encontrados na coluna Receita:**")
+                            for valor, count in valores_receita.items():
+                                st.write(f"• **{valor}**: {count:,} registros")
+                else:
+                    st.warning("⚠️ Colunas necessárias não encontradas")
+                    colunas_faltantes = []
+                    if 'Receita' not in sla.columns:
+                        colunas_faltantes.append('Receita')
+                    if 'Seq. De Fat' not in sla.columns:
+                        colunas_faltantes.append('Seq. De Fat')
+                    
+                    st.write(f"**Colunas faltantes:** {', '.join(colunas_faltantes)}")
+                    st.info("💡 Verifique se as colunas estão nomeadas exatamente como: 'Receita' e 'Seq. De Fat'")
         else:
             st.info("📊 Dados não disponíveis para análise de volumetria")
     
@@ -1035,7 +1197,10 @@ if sla is not None:
                             color=transp_ordenada['% SLA'],
                             color_continuous_scale='RdYlGn'
                         )
-                        fig.update_layout(height=500, showlegend=False)
+                        fig.update_traces(
+                            hovertemplate='<b>%{y}</b><br>% SLA Atingido: %{x:.1f}%<extra></extra>'
+                        )
+                        fig.update_layout(height=500, showlegend=False, coloraxis_showscale=False)
                         st.plotly_chart(fig, use_container_width=True)
                         
                         # Tabela de performance
@@ -1106,7 +1271,10 @@ if sla is not None:
                             color=pendentes_transp.values,
                             color_continuous_scale='Reds'
                         )
-                        fig.update_layout(height=500, showlegend=False)
+                        fig.update_traces(
+                            hovertemplate='<b>%{y}</b><br>Notas Pendentes: %{x}<extra></extra>'
+                        )
+                        fig.update_layout(height=500, showlegend=False, coloraxis_showscale=False)
                         st.plotly_chart(fig, use_container_width=True)
                         
                         # Tabela detalhada
