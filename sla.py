@@ -256,7 +256,7 @@ if uploaded_file is not None:
             colunas_essenciais = [
                 'Numero', 'Status', 'Transportador', 'Data de Entrega', 
                 'Previsão de Entrega', 'Dt Nota Fiscal', 'Unid Negoc',
-                'Receita', 'Seq. De Fat'
+                'Receita', 'Seq. De Fat', 'Valor NF'
             ]
             
             col_val1, col_val2 = st.columns(2)
@@ -1020,213 +1020,126 @@ if sla is not None:
                     
             with tab_contagem:
                 st.markdown("### 📊 Contagem de Notas")
-                st.markdown("Análise de atendimentos baseada na coluna Receita = SIM, somando valores da coluna Seq. De Fat")
+                st.markdown("**💡 Conceito:** Quanto menos vezes um mesmo pedido é faturado, melhor (menos gastos com frete)")
                 
                 # Verificar se as colunas necessárias existem
-                if all(col in sla.columns for col in ['Receita', 'Seq. De Fat']):
-                    # Filtrar apenas registros com Receita = SIM
+                if all(col in sla.columns for col in ['Receita', 'Seq. De Fat', 'Unid Negoc', 'Valor NF']):
+                    # Filtrar apenas registros com Receita = Sim
                     dados_receita = sla[sla['Receita'] == 'Sim'].copy()
                     
                     if not dados_receita.empty:
-                        st.success(f"✅ Encontrados {len(dados_receita):,} registros com Receita = SIM")
+                        st.success(f"✅ Encontrados {len(dados_receita):,} registros com Receita = Sim")
                         
-                        # Somar valores da coluna Seq. De Fat agrupando por valores únicos
-                        # Se quisermos ver a distribuição por valor único de Seq. De Fat
-                        soma_seq = dados_receita.groupby('Seq. De Fat')['Seq. De Fat'].sum().sort_index()
+                        # Criar tabela cruzada: Seq. De Fat x Unid Negoc
+                        # Contar quantidade de atendimentos
+                        pivot_contagem = pd.crosstab(
+                            dados_receita['Seq. De Fat'], 
+                            dados_receita['Unid Negoc'], 
+                            margins=True, 
+                            margins_name='Total Geral'
+                        )
                         
-                        # Total de atendimentos (soma de todos os valores de Seq. De Fat)
-                        total_atendimentos = dados_receita['Seq. De Fat'].sum()
+                        # Calcular percentuais por coluna (BU)
+                        pivot_percentual = pd.crosstab(
+                            dados_receita['Seq. De Fat'], 
+                            dados_receita['Unid Negoc'], 
+                            normalize='columns',
+                            margins=True, 
+                            margins_name='Total Geral'
+                        ) * 100
                         
-                        if not soma_seq.empty:
-                            # Calcular percentuais baseado no total de atendimentos
-                            percentuais = (soma_seq.values / total_atendimentos * 100).round(2)
-                            
-                            # Criar DataFrame para exibição
-                            tabela_contagem = pd.DataFrame({
-                                'Seq. De Fat': soma_seq.index,
-                                'Quantidade de Atendimentos': soma_seq.values,
-                                'Percentual': [f"{pct:.2f}%" for pct in percentuais]
-                            })
-                            
-                            # Adicionar linha de total
-                            linha_total = pd.DataFrame({
-                                'Seq. De Fat': ['Total Geral'],
-                                'Quantidade de Atendimentos': [total_atendimentos],
-                                'Percentual': ['100.00%']
-                            })
-                            tabela_final = pd.concat([tabela_contagem, linha_total], ignore_index=True)
-                            
-                            # Exibir métricas principais
-                            col1, col2, col3 = st.columns(3)
-                            
-                            with col1:
-                                st.metric("📊 Total de Atendimentos", f"{total_atendimentos:,}")
+                        # Somar valores de NF
+                        pivot_valor = dados_receita.pivot_table(
+                            index='Seq. De Fat',
+                            columns='Unid Negoc',
+                            values='Valor NF',
+                            aggfunc='sum',
+                            fill_value=0,
+                            margins=True,
+                            margins_name='Total Geral'
+                        )
+                        
+                        # Formatar tabela de percentuais
+                        tabela_percentual = pivot_percentual.round(2)
+                        
+                        # Criar tabela formatada para exibição
+                        st.markdown("### 📊 Distribuição por Sequência e BU - Percentuais")
+                        
+                        # Formatar percentuais para exibição
+                        def formatar_percentual(df):
+                            df_formatado = df.copy()
+                            for col in df_formatado.columns:
+                                df_formatado[col] = df_formatado[col].apply(lambda x: f"{x:.2f}%")
+                            return df_formatado
+                        
+                        tabela_perc_formatada = formatar_percentual(tabela_percentual)
+                        st.dataframe(tabela_perc_formatada, use_container_width=True)
+                        
+                        # Tabela de valores
+                        st.markdown("### 💰 Valores de NF por Sequência e BU")
+                        
+                        # Formatar valores monetários
+                        def formatar_moeda(df):
+                            df_formatado = df.copy()
+                            for col in df_formatado.columns:
+                                df_formatado[col] = df_formatado[col].apply(lambda x: f"R$ {x:,.2f}" if pd.notnull(x) and x != 0 else "R$ 0,00")
+                            return df_formatado
+                        
+                        tabela_valor_formatada = formatar_moeda(pivot_valor)
+                        st.dataframe(tabela_valor_formatada, use_container_width=True)
+                        
+                        # Tabela combinada (Percentual + Valor) por BU
+                        st.markdown("### 📋 Resumo por BU - Percentual e Valor")
+                        
+                        # Criar resumo por BU
+                        for bu in pivot_percentual.columns:
+                            if bu != 'Total Geral':
+                                st.markdown(f"#### 🏢 {bu}")
                                 
-                            with col2:
-                                seq_maior_volume = soma_seq.idxmax()  # Seq com maior volume de atendimentos
-                                st.metric("🔢 Seq. Maior Volume", seq_maior_volume)
-                                
-                            with col3:
-                                maior_percentual = percentuais.max()
-                                st.metric("📈 Maior Concentração", f"{maior_percentual:.2f}%")
-                            
-                            # Gráfico de barras
-                            if len(soma_seq) <= 20:  # Mostrar gráfico apenas se não houver muitos valores
-                                # Criar DataFrame para o gráfico de contagem
-                                df_contagem = pd.DataFrame({
-                                    'Seq. De Fat': soma_seq.index.astype(str),
-                                    'Quantidade': soma_seq.values
+                                # Criar tabela combinada para este BU
+                                resumo_bu = pd.DataFrame({
+                                    'Sequência': pivot_percentual.index,
+                                    'Percentual': [f"{val:.2f}%" for val in pivot_percentual[bu]],
+                                    'Valor NF': [f"R$ {pivot_valor[bu][idx]:,.2f}" for idx in pivot_percentual.index]
                                 })
                                 
-                                fig_contagem = px.bar(
-                                    df_contagem,
-                                    x='Seq. De Fat',
-                                    y='Quantidade',
-                                    title="📊 Distribuição de Atendimentos por Seq. De Fat",
-                                    labels={'Seq. De Fat': 'Seq. De Fat', 'Quantidade': 'Quantidade de Atendimentos'},
-                                    text='Quantidade'
-                                )
-                                fig_contagem.update_traces(
-                                    textposition='outside',
-                                    hovertemplate='<b>Seq. %{x}</b><br>Atendimentos: %{y}<br>Percentual: %{customdata:.2f}%<extra></extra>',
-                                    customdata=percentuais
-                                )
-                                fig_contagem.update_layout(height=500, showlegend=False)
-                                st.plotly_chart(fig_contagem, use_container_width=True)
-                            
-                            # Tabela detalhada estilizada
-                            st.markdown("### 📋 Tabela Detalhada - Distribuição de Atendimentos")
-                            
-                            # Estilizar a tabela
-                            def estilizar_tabela(df):
-                                def aplicar_estilo(row):
-                                    if row['Seq. De Fat'] == 'Total Geral':
-                                        return ['background-color: #2E86AB; color: white; font-weight: bold;'] * len(row)
-                                    else:
-                                        return [''] * len(row)
-                                return df.style.apply(aplicar_estilo, axis=1)
-                            
-                            st.dataframe(
-                                estilizar_tabela(tabela_final),
-                                use_container_width=True,
-                                hide_index=True
-                            )
-                            
-                            # Análise adicional por Unidade de Negócio (se disponível)
-                            if 'Unid Negoc' in dados_receita.columns:
-                                st.markdown("### 🏢 Análise por Unidade de Negócio")
-                                
-                                # Criar uma análise mais simples agrupando por Unid Negoc
-                                atendimentos_por_bu = dados_receita.groupby('Unid Negoc')['Seq. De Fat'].sum().sort_values(ascending=False)
-                                
-                                if not atendimentos_por_bu.empty:
-                                    # Calcular percentuais
-                                    total_bu = atendimentos_por_bu.sum()
-                                    percentuais_bu = (atendimentos_por_bu / total_bu * 100).round(2)
-                                    
-                                    # Criar DataFrame para exibição
-                                    tabela_bu = pd.DataFrame({
-                                        'Unidade de Negócio': atendimentos_por_bu.index,
-                                        'Total de Atendimentos': atendimentos_por_bu.values,
-                                        'Percentual': [f"{pct:.2f}%" for pct in percentuais_bu.values]
-                                    })
-                                    
-                                    # Gráfico por BU
-                                    if len(atendimentos_por_bu) <= 15:
-                                        # Criar DataFrame para o gráfico de BU
-                                        df_bu = pd.DataFrame({
-                                            'Unidade de Negócio': atendimentos_por_bu.index,
-                                            'Total de Atendimentos': atendimentos_por_bu.values
-                                        })
-                                        
-                                        fig_bu = px.bar(
-                                            df_bu,
-                                            x='Total de Atendimentos',
-                                            y='Unidade de Negócio',
-                                            orientation='h',
-                                            title="🏢 Atendimentos por Unidade de Negócio",
-                                            labels={'Total de Atendimentos': 'Total de Atendimentos', 'Unidade de Negócio': 'Unidade de Negócio'},
-                                            text='Total de Atendimentos'
-                                        )
-                                        fig_bu.update_traces(
-                                            textposition='outside',
-                                            hovertemplate='<b>%{y}</b><br>Atendimentos: %{x}<br>Percentual: %{customdata:.2f}%<extra></extra>',
-                                            customdata=percentuais_bu.values
-                                        )
-                                        fig_bu.update_layout(height=400, showlegend=False)
-                                        st.plotly_chart(fig_bu, use_container_width=True)
-                                    
-                                    # Tabela detalhada por BU
-                                    st.dataframe(tabela_bu, use_container_width=True, hide_index=True)
-                                    
-                                    # Análise detalhada por BU e Seq
-                                    with st.expander("📊 Detalhamento por BU e Sequência"):
-                                        try:
-                                            # Usar crosstab mais simples - contar ocorrências primeiro
-                                            tabela_detalhada = pd.crosstab(
-                                                dados_receita['Unid Negoc'], 
-                                                dados_receita['Seq. De Fat'], 
-                                                margins=True,
-                                                margins_name='Total'
-                                            )
-                                            st.dataframe(tabela_detalhada, use_container_width=True)
-                                        except Exception as e:
-                                            st.warning("⚠️ Não foi possível gerar a análise detalhada por sequência")
-                                            # Mostrar análise alternativa simples
-                                            bu_seq_summary = dados_receita.groupby(['Unid Negoc', 'Seq. De Fat'])['Seq. De Fat'].sum().reset_index()
-                                            bu_seq_summary.columns = ['Unidade de Negócio', 'Sequência', 'Total Atendimentos']
-                                            st.dataframe(bu_seq_summary, use_container_width=True, hide_index=True)
-                                else:
-                                    st.info("📊 Nenhum dado de Unidade de Negócio disponível")
-                            
-                            # Insights automáticos
-                            st.markdown("### 💡 Insights da Análise")
-                            
-                            concentracao_top3 = sum(sorted(percentuais, reverse=True)[:3])
-                            diversidade = len(soma_seq)
-                            
-                            if maior_percentual > 50:
-                                st.warning(f"""
-                                **⚠️ Alta Concentração Detectada:**
-                                - Seq. {seq_maior_volume} representa {maior_percentual:.1f}% dos atendimentos
-                                - Concentração elevada pode indicar dependência de um processo específico
-                                - Top 3 Seq. representam {concentracao_top3:.1f}% do total
-                                """)
-                            elif concentracao_top3 > 80:
-                                st.info(f"""
-                                **📊 Concentração Moderada:**
-                                - Top 3 Seq. representam {concentracao_top3:.1f}% dos atendimentos
-                                - Distribuição razoavelmente equilibrada
-                                - {diversidade} sequências diferentes identificadas
-                                """)
-                            else:
-                                st.success(f"""
-                                **✅ Distribuição Equilibrada:**
-                                - Boa diversificação entre as sequências
-                                - Top 3 representam apenas {concentracao_top3:.1f}% do total
-                                - {diversidade} sequências diferentes ativas
-                                """)
-                        else:
-                            st.info("📊 Nenhuma sequência encontrada nos dados filtrados")
-                    else:
-                        st.warning("⚠️ Nenhum registro encontrado com Receita = SIM")
+                                st.dataframe(resumo_bu, use_container_width=True, hide_index=True)
                         
-                        # Mostrar valores únicos da coluna Receita para debug
-                        if 'Receita' in sla.columns:
-                            valores_receita = sla['Receita'].value_counts()
-                            st.write("**Valores encontrados na coluna Receita:**")
-                            for valor, count in valores_receita.items():
-                                st.write(f"• **{valor}**: {count:,} registros")
+                        # Insights principais
+                        st.markdown("### 💡 Principais Insights")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            seq_1_perc = pivot_percentual.loc[1, 'Total Geral'] if 1 in pivot_percentual.index else 0
+                            st.metric("🎯 Sequência 1 (Ideal)", f"{seq_1_perc:.1f}%", 
+                                     help="Quanto maior, melhor - menos retrabalho")
+                        
+                        with col2:
+                            total_valor = pivot_valor.loc['Total Geral', 'Total Geral']
+                            st.metric("💰 Valor Total", f"R$ {total_valor:,.2f}")
+                        
+                        with col3:
+                            num_sequencias = len([seq for seq in pivot_percentual.index if seq != 'Total Geral'])
+                            st.metric("🔢 Sequências Utilizadas", num_sequencias)
+                        
+                        # Análise de eficiência
+                        if seq_1_perc >= 70:
+                            st.success(f"✅ **Excelente eficiência:** {seq_1_perc:.1f}% dos pedidos são faturados de uma só vez")
+                        elif seq_1_perc >= 60:
+                            st.info(f"📊 **Boa eficiência:** {seq_1_perc:.1f}% dos pedidos são faturados de uma só vez")
+                        else:
+                            st.warning(f"⚠️ **Atenção:** Apenas {seq_1_perc:.1f}% dos pedidos são faturados de uma só vez - muitos retrabalhos")
+                            
+                    else:
+                        st.warning("⚠️ Nenhum registro encontrado com Receita = Sim")
                 else:
-                    st.warning("⚠️ Colunas necessárias não encontradas")
-                    colunas_faltantes = []
-                    if 'Receita' not in sla.columns:
-                        colunas_faltantes.append('Receita')
-                    if 'Seq. De Fat' not in sla.columns:
-                        colunas_faltantes.append('Seq. De Fat')
+                    # Verificar quais colunas estão faltando
+                    colunas_necessarias = ['Receita', 'Seq. De Fat', 'Unid Negoc', 'Valor NF']
+                    colunas_faltantes = [col for col in colunas_necessarias if col not in sla.columns]
                     
-                    st.write(f"**Colunas faltantes:** {', '.join(colunas_faltantes)}")
-                    st.info("💡 Verifique se as colunas estão nomeadas exatamente como: 'Receita' e 'Seq. De Fat'")
+                    st.error(f"❌ Colunas necessárias não encontradas: {', '.join(colunas_faltantes)}")
+                    st.info("💡 Colunas necessárias: Receita, Seq. De Fat, Unid Negoc, Valor NF")
         else:
             st.info("📊 Dados não disponíveis para análise de volumetria")
     
