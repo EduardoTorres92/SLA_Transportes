@@ -318,7 +318,7 @@ if sla is not None:
     # Filtro por BU (multiselect)
     if 'Unid Negoc' in sla.columns:
         # Remover BUs específicas da análise (070, 080, 720)
-        bus_excluidas = ['070 - CD Shared', '080 - Planta Geral', '720 - SIP2']
+        bus_excluidas = []
         todas_bus = sla['Unid Negoc'].dropna().unique().tolist()
         bus_disponiveis = sorted([bu for bu in todas_bus if str(bu) not in bus_excluidas])
         bus_selecionadas = st.sidebar.multiselect(
