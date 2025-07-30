@@ -379,6 +379,8 @@ if sla is not None:
         transportadoras_selecionadas = []
     
     # Aplicar filtros aos dados
+    # Manter uma cópia dos dados originais para a busca de nota fiscal
+    sla_original = sla.copy()
     sla_filtrado = sla.copy()
     
     # Aplicar filtro de BU (multiselect)
@@ -1716,8 +1718,8 @@ if sla is not None:
             # Converter para string para comparação
             numero_nf_str = str(numero_nf)
             
-            # Filtrar dados baseado no número da NF
-            resultado = sla[sla['Numero'].astype(str).str.contains(numero_nf_str, case=False, na=False)]
+            # Filtrar dados baseado no número da NF (usar dados originais, não filtrados)
+            resultado = sla_original[sla_original['Numero'].astype(str).str.contains(numero_nf_str, case=False, na=False)]
             
             if not resultado.empty:
                 st.success(f"🎯 Encontradas {len(resultado)} nota(s) fiscal(is)")
