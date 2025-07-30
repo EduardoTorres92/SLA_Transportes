@@ -452,14 +452,23 @@ if sla is not None:
             # Calcular métricas principais
             total_nfs = len(sla)
             
-            # Taxa de SLA (assumindo que entregas no prazo são as que têm data de entrega <= previsão)
+            # Taxa de SLA (considerar TODAS as entregas, incluindo pendentes)
             try:
                 sla['Data de Entrega'] = pd.to_datetime(sla['Data de Entrega'], errors='coerce')
                 sla['Previsão de Entrega'] = pd.to_datetime(sla['Previsão de Entrega'], errors='coerce')
                 
-                entregas_realizadas = sla.dropna(subset=['Data de Entrega', 'Previsão de Entrega'])
-                entregas_no_prazo = len(entregas_realizadas[entregas_realizadas['Data de Entrega'] <= entregas_realizadas['Previsão de Entrega']])
-                taxa_sla = (entregas_no_prazo / len(entregas_realizadas) * 100) if len(entregas_realizadas) > 0 else 0
+                # Considerar apenas registros com Previsão de Entrega (base para cálculo)
+                entregas_com_previsao = sla.dropna(subset=['Previsão de Entrega'])
+                
+                # Entregas no prazo: têm data de entrega e data <= previsão
+                entregas_no_prazo = len(entregas_com_previsao[
+                    (entregas_com_previsao['Data de Entrega'].notna()) & 
+                    (entregas_com_previsao['Data de Entrega'] <= entregas_com_previsao['Previsão de Entrega'])
+                ])
+                
+                # Total de entregas = todas com previsão (realizadas + pendentes)
+                total_entregas_base = len(entregas_com_previsao)
+                taxa_sla = (entregas_no_prazo / total_entregas_base * 100) if total_entregas_base > 0 else 0
             except:
                 taxa_sla = 0
                 
@@ -579,7 +588,7 @@ if sla is not None:
             # Insights específicos abaixo do gráfico
             if taxa_sla < 95:
                 gap_necessario = 95 - taxa_sla
-                entregas_necessarias = int((gap_necessario / 100) * len(entregas_realizadas)) if len(entregas_realizadas) > 0 else 0
+                entregas_necessarias = int((gap_necessario / 100) * total_entregas_base) if total_entregas_base > 0 else 0
                 
                 st.warning(f"""
                 **🚨 Ações Necessárias:**
@@ -933,23 +942,28 @@ if sla is not None:
         st.markdown("Análise detalhada da performance de entrega por transportadora e status.")
         
         if all(col in sla.columns for col in ['Transportador', 'Data de Entrega', 'Previsão de Entrega']):
-            # Filtrar apenas entregas realizadas (com data de entrega)
-            entregas_realizadas = sla.dropna(subset=['Data de Entrega', 'Previsão de Entrega', 'Transportador'])
+            # Considerar TODAS as entregas (realizadas + pendentes)
+            todas_entregas = sla.dropna(subset=['Previsão de Entrega', 'Transportador'])
             
-            if not entregas_realizadas.empty:
+            if not todas_entregas.empty:
                 # Garantir que as datas estão no formato correto
-                entregas_realizadas = entregas_realizadas.copy()
-                entregas_realizadas['Data de Entrega'] = pd.to_datetime(entregas_realizadas['Data de Entrega'], errors='coerce')
-                entregas_realizadas['Previsão de Entrega'] = pd.to_datetime(entregas_realizadas['Previsão de Entrega'], errors='coerce')
+                todas_entregas = todas_entregas.copy()
+                todas_entregas['Data de Entrega'] = pd.to_datetime(todas_entregas['Data de Entrega'], errors='coerce')
+                todas_entregas['Previsão de Entrega'] = pd.to_datetime(todas_entregas['Previsão de Entrega'], errors='coerce')
                 
-                # Classificar entregas como no prazo ou atrasadas
-                entregas_realizadas['Status_Entrega'] = entregas_realizadas.apply(
-                    lambda row: 'Entregue no Prazo' if row['Data de Entrega'] <= row['Previsão de Entrega'] else 'Entregue Atrasada',
-                    axis=1
-                )
+                # Classificar entregas: no prazo, atrasadas ou pendentes
+                def classificar_entrega(row):
+                    if pd.isna(row['Data de Entrega']):
+                        return 'Entrega Pendente'
+                    elif row['Data de Entrega'] <= row['Previsão de Entrega']:
+                        return 'Entregue no Prazo'
+                    else:
+                        return 'Entregue Atrasada'
+                
+                todas_entregas['Status_Entrega'] = todas_entregas.apply(classificar_entrega, axis=1)
                 
                 # Agrupar por transportadora e status de entrega
-                performance_transp = entregas_realizadas.groupby(['Transportador', 'Status_Entrega']).size().unstack(fill_value=0)
+                performance_transp = todas_entregas.groupby(['Transportador', 'Status_Entrega']).size().unstack(fill_value=0)
                 
                 # Calcular percentuais
                 performance_transp_pct = performance_transp.div(performance_transp.sum(axis=1), axis=0) * 100
@@ -1017,30 +1031,105 @@ if sla is not None:
                     
                     st.plotly_chart(fig_performance, use_container_width=True, key="performance_sla_transportadoras")
                     
-                    # Exibir tabela com dados focados na performance
+                    # Gráfico stacked com todas as categorias
+                    st.markdown("### 📊 Distribuição Completa de Status")
+                    
+                    # Preparar dados para gráfico stacked
+                    if not performance_filtrada.empty:
+                        # Garantir que todas as colunas existam
+                        for col in ['Entregue no Prazo', 'Entregue Atrasada', 'Entrega Pendente']:
+                            if col not in performance_filtrada.columns:
+                                performance_filtrada[col] = 0
+                        
+                        # Ordenar por % no prazo
+                        performance_stacked = performance_filtrada.sort_values('Entregue no Prazo', ascending=True)
+                        
+                        fig_stacked = go.Figure()
+                        
+                        # Entregas no prazo (verde)
+                        fig_stacked.add_trace(go.Bar(
+                            name='✅ No Prazo',
+                            y=performance_stacked.index,
+                            x=performance_stacked['Entregue no Prazo'],
+                            orientation='h',
+                            marker_color='#28a745',
+                            text=[f'{val:.1f}%' if val > 5 else '' for val in performance_stacked['Entregue no Prazo']],
+                            textposition='inside',
+                            textfont=dict(color='white', size=10)
+                        ))
+                        
+                        # Entregas atrasadas (vermelho)
+                        fig_stacked.add_trace(go.Bar(
+                            name='❌ Atrasada',
+                            y=performance_stacked.index,
+                            x=performance_stacked['Entregue Atrasada'],
+                            orientation='h',
+                            marker_color='#dc3545',
+                            text=[f'{val:.1f}%' if val > 5 else '' for val in performance_stacked['Entregue Atrasada']],
+                            textposition='inside',
+                            textfont=dict(color='white', size=10)
+                        ))
+                        
+                        # Entregas pendentes (laranja)
+                        fig_stacked.add_trace(go.Bar(
+                            name='⏳ Pendente',
+                            y=performance_stacked.index,
+                            x=performance_stacked['Entrega Pendente'],
+                            orientation='h',
+                            marker_color='#ffc107',
+                            text=[f'{val:.1f}%' if val > 5 else '' for val in performance_stacked['Entrega Pendente']],
+                            textposition='inside',
+                            textfont=dict(color='black', size=10)
+                        ))
+                        
+                        fig_stacked.update_layout(
+                            title='📈 Distribuição de Status por Transportadora (%)',
+                            xaxis_title='Percentual (%)',
+                            yaxis_title='Transportadora',
+                            barmode='stack',
+                            height=500,
+                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            xaxis=dict(showgrid=True, gridwidth=1, gridcolor='LightGray', range=[0, 100]),
+                            yaxis=dict(showgrid=False),
+                            margin=dict(l=20, r=20, t=80, b=20)
+                        )
+                        
+                        st.plotly_chart(fig_stacked, use_container_width=True, key="distribuicao_status_transportadoras")
+                    
+                    # Exibir tabela com dados detalhados incluindo todas as categorias
                     with st.expander("📊 Dados Detalhados da Performance"):
-                        # Criar tabela com foco nas entregas no prazo
+                        # Criar tabela completa com todas as categorias
                         tabela_performance = performance_transp.loc[transportadoras_relevantes].copy()
                         tabela_performance['Total Entregas'] = tabela_performance.sum(axis=1)
                         
-                        # Focar apenas nas entregas no prazo
+                        # Calcular percentuais para todas as categorias
                         if 'Entregue no Prazo' in tabela_performance.columns:
-                            tabela_performance['% SLA Atingido'] = (tabela_performance['Entregue no Prazo'] / tabela_performance['Total Entregas'] * 100).round(1)
+                            tabela_performance['% No Prazo'] = (tabela_performance['Entregue no Prazo'] / tabela_performance['Total Entregas'] * 100).round(1)
+                        if 'Entregue Atrasada' in tabela_performance.columns:
+                            tabela_performance['% Atrasada'] = (tabela_performance['Entregue Atrasada'] / tabela_performance['Total Entregas'] * 100).round(1)
+                        if 'Entrega Pendente' in tabela_performance.columns:
+                            tabela_performance['% Pendente'] = (tabela_performance['Entrega Pendente'] / tabela_performance['Total Entregas'] * 100).round(1)
                         
-                        # Selecionar e renomear colunas para exibição
-                        colunas_exibir = ['Entregue no Prazo', 'Total Entregas', '% SLA Atingido']
+                        # Selecionar e renomear colunas para exibição completa
+                        colunas_exibir = ['Entregue no Prazo', 'Entregue Atrasada', 'Entrega Pendente', 'Total Entregas', '% No Prazo', '% Atrasada', '% Pendente']
                         colunas_disponiveis = [col for col in colunas_exibir if col in tabela_performance.columns]
                         
                         tabela_final = tabela_performance[colunas_disponiveis].copy()
                         tabela_final = tabela_final.rename(columns={
-                            'Entregue no Prazo': '✅ Entregas no Prazo',
-                            'Total Entregas': '📦 Total de Entregas',
-                            '% SLA Atingido': '🎯 % SLA Atingido'
+                            'Entregue no Prazo': '✅ No Prazo',
+                            'Entregue Atrasada': '❌ Atrasada',
+                            'Entrega Pendente': '⏳ Pendente',
+                            'Total Entregas': '📦 Total',
+                            '% No Prazo': '🎯 % No Prazo',
+                            '% Atrasada': '🔴 % Atrasada',
+                            '% Pendente': '⏳ % Pendente'
                         })
                         
                         # Ordenar por performance (melhor primeiro)
-                        if '🎯 % SLA Atingido' in tabela_final.columns:
-                            tabela_final = tabela_final.sort_values('🎯 % SLA Atingido', ascending=False)
+                        if '🎯 % No Prazo' in tabela_final.columns:
+                            tabela_final = tabela_final.sort_values('🎯 % No Prazo', ascending=False)
                         
                         st.dataframe(tabela_final, use_container_width=True)
                 else:
