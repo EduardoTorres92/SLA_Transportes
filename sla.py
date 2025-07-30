@@ -992,7 +992,7 @@ if sla is not None:
                     
             with tab_contagem:
                 st.markdown("### 📊 Contagem de Notas")
-                st.markdown("Análise baseada na coluna Receita = SIM usando Seq. De Fat")
+                st.markdown("Análise de atendimentos baseada na coluna Receita = SIM, somando valores da coluna Seq. De Fat")
                 
                 # Verificar se as colunas necessárias existem
                 if all(col in sla.columns for col in ['Receita', 'Seq. De Fat']):
@@ -1002,25 +1002,28 @@ if sla is not None:
                     if not dados_receita.empty:
                         st.success(f"✅ Encontrados {len(dados_receita):,} registros com Receita = SIM")
                         
-                        # Contagem por Seq. De Fat
-                        contagem_seq = dados_receita['Seq. De Fat'].value_counts().sort_index()
+                        # Somar valores da coluna Seq. De Fat agrupando por valores únicos
+                        # Se quisermos ver a distribuição por valor único de Seq. De Fat
+                        soma_seq = dados_receita.groupby('Seq. De Fat')['Seq. De Fat'].sum().sort_index()
                         
-                        if not contagem_seq.empty:
-                            # Calcular percentuais
-                            total_notas = len(dados_receita)
-                            percentuais = (contagem_seq.values / total_notas * 100).round(2)
+                        # Total de atendimentos (soma de todos os valores de Seq. De Fat)
+                        total_atendimentos = dados_receita['Seq. De Fat'].sum()
+                        
+                        if not soma_seq.empty:
+                            # Calcular percentuais baseado no total de atendimentos
+                            percentuais = (soma_seq.values / total_atendimentos * 100).round(2)
                             
-                            # Criar DataFrame para exibição similar à imagem
+                            # Criar DataFrame para exibição
                             tabela_contagem = pd.DataFrame({
-                                'Rótulos de Linha': contagem_seq.index,
-                                'Quantidade': contagem_seq.values,
+                                'Seq. De Fat': soma_seq.index,
+                                'Quantidade de Atendimentos': soma_seq.values,
                                 'Percentual': [f"{pct:.2f}%" for pct in percentuais]
                             })
                             
                             # Adicionar linha de total
                             linha_total = pd.DataFrame({
-                                'Rótulos de Linha': ['Total Geral'],
-                                'Quantidade': [total_notas],
+                                'Seq. De Fat': ['Total Geral'],
+                                'Quantidade de Atendimentos': [total_atendimentos],
                                 'Percentual': ['100.00%']
                             })
                             tabela_final = pd.concat([tabela_contagem, linha_total], ignore_index=True)
@@ -1029,40 +1032,40 @@ if sla is not None:
                             col1, col2, col3 = st.columns(3)
                             
                             with col1:
-                                st.metric("📊 Total de Notas", f"{total_notas:,}")
+                                st.metric("📊 Total de Atendimentos", f"{total_atendimentos:,}")
                                 
                             with col2:
-                                seq_mais_comum = contagem_seq.index[0]
-                                st.metric("🔢 Seq. Mais Comum", seq_mais_comum)
+                                seq_maior_volume = soma_seq.idxmax()  # Seq com maior volume de atendimentos
+                                st.metric("🔢 Seq. Maior Volume", seq_maior_volume)
                                 
                             with col3:
-                                maior_percentual = percentuais[0]
+                                maior_percentual = percentuais.max()
                                 st.metric("📈 Maior Concentração", f"{maior_percentual:.2f}%")
                             
                             # Gráfico de barras
-                            if len(contagem_seq) <= 20:  # Mostrar gráfico apenas se não houver muitos valores
+                            if len(soma_seq) <= 20:  # Mostrar gráfico apenas se não houver muitos valores
                                 fig_contagem = px.bar(
-                                    x=contagem_seq.index.astype(str),
-                                    y=contagem_seq.values,
-                                    title="📊 Distribuição por Seq. De Fat",
-                                    labels={'x': 'Seq. De Fat', 'y': 'Quantidade de Notas'},
-                                    text=contagem_seq.values
+                                    x=soma_seq.index.astype(str),
+                                    y=soma_seq.values,
+                                    title="📊 Distribuição de Atendimentos por Seq. De Fat",
+                                    labels={'x': 'Seq. De Fat', 'y': 'Quantidade de Atendimentos'},
+                                    text=soma_seq.values
                                 )
                                 fig_contagem.update_traces(
                                     textposition='outside',
-                                    hovertemplate='<b>Seq. %{x}</b><br>Quantidade: %{y}<br>Percentual: %{customdata:.2f}%<extra></extra>',
+                                    hovertemplate='<b>Seq. %{x}</b><br>Atendimentos: %{y}<br>Percentual: %{customdata:.2f}%<extra></extra>',
                                     customdata=percentuais
                                 )
                                 fig_contagem.update_layout(height=500, showlegend=False)
                                 st.plotly_chart(fig_contagem, use_container_width=True)
                             
                             # Tabela detalhada estilizada
-                            st.markdown("### 📋 Tabela Detalhada - Contagem de Notas")
+                            st.markdown("### 📋 Tabela Detalhada - Distribuição de Atendimentos")
                             
                             # Estilizar a tabela
                             def estilizar_tabela(df):
                                 def aplicar_estilo(row):
-                                    if row['Rótulos de Linha'] == 'Total Geral':
+                                    if row['Seq. De Fat'] == 'Total Geral':
                                         return ['background-color: #2E86AB; color: white; font-weight: bold;'] * len(row)
                                     else:
                                         return [''] * len(row)
@@ -1078,26 +1081,32 @@ if sla is not None:
                             if 'Unid Negoc' in dados_receita.columns:
                                 st.markdown("### 🏢 Análise por Unidade de Negócio")
                                 
-                                # Contagem cruzada: Unid Negoc vs Seq. De Fat
-                                tabela_cruzada = pd.crosstab(
-                                    dados_receita['Unid Negoc'], 
-                                    dados_receita['Seq. De Fat'], 
+                                # Soma dos atendimentos: Unid Negoc vs Seq. De Fat
+                                tabela_cruzada = dados_receita.pivot_table(
+                                    index='Unid Negoc', 
+                                    columns='Seq. De Fat', 
+                                    values='Seq. De Fat', 
+                                    aggfunc='sum', 
+                                    fill_value=0,
                                     margins=True
                                 )
                                 
                                 # Calcular percentuais por linha (por unidade de negócio)
-                                tabela_percentual = pd.crosstab(
-                                    dados_receita['Unid Negoc'], 
-                                    dados_receita['Seq. De Fat'], 
+                                tabela_percentual = dados_receita.pivot_table(
+                                    index='Unid Negoc', 
+                                    columns='Seq. De Fat', 
+                                    values='Seq. De Fat', 
+                                    aggfunc='sum', 
+                                    fill_value=0,
                                     normalize='index'
                                 ) * 100
                                 
-                                # Exibir contagem absoluta
-                                with st.expander("📊 Contagem Absoluta por Unidade de Negócio"):
+                                # Exibir soma de atendimentos
+                                with st.expander("📊 Total de Atendimentos por Unidade de Negócio"):
                                     st.dataframe(tabela_cruzada, use_container_width=True)
                                 
                                 # Exibir percentuais
-                                with st.expander("📈 Percentuais por Unidade de Negócio"):
+                                with st.expander("📈 Percentuais de Atendimentos por Unidade de Negócio"):
                                     # Formatar percentuais
                                     tabela_perc_formatada = tabela_percentual.round(2).astype(str) + '%'
                                     st.dataframe(tabela_perc_formatada, use_container_width=True)
@@ -1106,19 +1115,19 @@ if sla is not None:
                             st.markdown("### 💡 Insights da Análise")
                             
                             concentracao_top3 = sum(sorted(percentuais, reverse=True)[:3])
-                            diversidade = len(contagem_seq)
+                            diversidade = len(soma_seq)
                             
                             if maior_percentual > 50:
                                 st.warning(f"""
                                 **⚠️ Alta Concentração Detectada:**
-                                - Seq. {seq_mais_comum} representa {maior_percentual:.1f}% das notas
+                                - Seq. {seq_maior_volume} representa {maior_percentual:.1f}% dos atendimentos
                                 - Concentração elevada pode indicar dependência de um processo específico
                                 - Top 3 Seq. representam {concentracao_top3:.1f}% do total
                                 """)
                             elif concentracao_top3 > 80:
                                 st.info(f"""
                                 **📊 Concentração Moderada:**
-                                - Top 3 Seq. representam {concentracao_top3:.1f}% das notas
+                                - Top 3 Seq. representam {concentracao_top3:.1f}% dos atendimentos
                                 - Distribuição razoavelmente equilibrada
                                 - {diversidade} sequências diferentes identificadas
                                 """)
