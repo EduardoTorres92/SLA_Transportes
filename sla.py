@@ -1030,8 +1030,8 @@ if sla is not None:
                     if not dados_receita.empty:
                         st.success(f"✅ Encontrados {len(dados_receita):,} registros com Receita = Sim")
                         
-                        # Criar tabela cruzada: Seq. De Fat x Unid Negoc
-                        # Contar quantidade de atendimentos
+                        # Preparar dados para ambas as análises
+                        # Contar quantidade de notas (registros)
                         pivot_contagem = pd.crosstab(
                             dados_receita['Seq. De Fat'], 
                             dados_receita['Unid Negoc'], 
@@ -1059,53 +1059,80 @@ if sla is not None:
                             margins_name='Total Geral'
                         )
                         
-                        # Formatar tabela de percentuais
-                        tabela_percentual = pivot_percentual.round(2)
+                        # Criar sub-tabs
+                        subtab_percentual, subtab_absoluto = st.tabs(["📊 Percentual", "🔢 Números Absolutos"])
                         
-                        # Criar tabela formatada para exibição
-                        st.markdown("### 📊 Distribuição por Sequência e BU - Percentuais")
+                        # ===== SUB-TAB PERCENTUAL =====
+                        with subtab_percentual:
+                            st.markdown("#### 📊 Distribuição por Sequência e BU - Percentuais")
+                            
+                            # Formatar percentuais para exibição
+                            def formatar_percentual(df):
+                                df_formatado = df.copy()
+                                for col in df_formatado.columns:
+                                    df_formatado[col] = df_formatado[col].apply(lambda x: f"{x:.2f}%")
+                                return df_formatado
+                            
+                            tabela_perc_formatada = formatar_percentual(pivot_percentual.round(2))
+                            st.dataframe(tabela_perc_formatada, use_container_width=True)
+                            
+                            # Tabela de valores de NF com percentuais
+                            st.markdown("#### 💰 Valores de NF por Sequência e BU")
+                            
+                            # Formatar valores monetários
+                            def formatar_moeda(df):
+                                df_formatado = df.copy()
+                                for col in df_formatado.columns:
+                                    df_formatado[col] = df_formatado[col].apply(lambda x: f"R$ {x:,.2f}" if pd.notnull(x) and x != 0 else "R$ 0,00")
+                                return df_formatado
+                            
+                            tabela_valor_formatada = formatar_moeda(pivot_valor)
+                            st.dataframe(tabela_valor_formatada, use_container_width=True)
+                            
+                            # Resumo por BU - Percentual
+                            st.markdown("#### 📋 Resumo por BU - Percentual e Valor")
+                            
+                            for bu in pivot_percentual.columns:
+                                if bu != 'Total Geral':
+                                    st.markdown(f"**🏢 {bu}**")
+                                    
+                                    resumo_bu = pd.DataFrame({
+                                        'Sequência': pivot_percentual.index,
+                                        'Percentual': [f"{val:.2f}%" for val in pivot_percentual[bu]],
+                                        'Valor NF': [f"R$ {pivot_valor[bu][idx]:,.2f}" for idx in pivot_percentual.index]
+                                    })
+                                    
+                                    st.dataframe(resumo_bu, use_container_width=True, hide_index=True)
                         
-                        # Formatar percentuais para exibição
-                        def formatar_percentual(df):
-                            df_formatado = df.copy()
-                            for col in df_formatado.columns:
-                                df_formatado[col] = df_formatado[col].apply(lambda x: f"{x:.2f}%")
-                            return df_formatado
+                        # ===== SUB-TAB NÚMEROS ABSOLUTOS =====
+                        with subtab_absoluto:
+                            st.markdown("#### 🔢 Quantidade de Notas por Sequência e BU")
+                            
+                            # Mostrar tabela de contagem (números absolutos)
+                            st.dataframe(pivot_contagem, use_container_width=True)
+                            
+                            # Tabela de valores de NF com números absolutos
+                            st.markdown("#### 💰 Valores de NF por Sequência e BU")
+                            
+                            tabela_valor_formatada_abs = formatar_moeda(pivot_valor)
+                            st.dataframe(tabela_valor_formatada_abs, use_container_width=True)
+                            
+                            # Resumo por BU - Números Absolutos
+                            st.markdown("#### 📋 Resumo por BU - Quantidade e Valor")
+                            
+                            for bu in pivot_contagem.columns:
+                                if bu != 'Total Geral':
+                                    st.markdown(f"**🏢 {bu}**")
+                                    
+                                    resumo_bu_abs = pd.DataFrame({
+                                        'Sequência': pivot_contagem.index,
+                                        'Quantidade de Notas': [f"{val:,}" for val in pivot_contagem[bu]],
+                                        'Valor NF': [f"R$ {pivot_valor[bu][idx]:,.2f}" for idx in pivot_contagem.index]
+                                    })
+                                    
+                                    st.dataframe(resumo_bu_abs, use_container_width=True, hide_index=True)
                         
-                        tabela_perc_formatada = formatar_percentual(tabela_percentual)
-                        st.dataframe(tabela_perc_formatada, use_container_width=True)
-                        
-                        # Tabela de valores
-                        st.markdown("### 💰 Valores de NF por Sequência e BU")
-                        
-                        # Formatar valores monetários
-                        def formatar_moeda(df):
-                            df_formatado = df.copy()
-                            for col in df_formatado.columns:
-                                df_formatado[col] = df_formatado[col].apply(lambda x: f"R$ {x:,.2f}" if pd.notnull(x) and x != 0 else "R$ 0,00")
-                            return df_formatado
-                        
-                        tabela_valor_formatada = formatar_moeda(pivot_valor)
-                        st.dataframe(tabela_valor_formatada, use_container_width=True)
-                        
-                        # Tabela combinada (Percentual + Valor) por BU
-                        st.markdown("### 📋 Resumo por BU - Percentual e Valor")
-                        
-                        # Criar resumo por BU
-                        for bu in pivot_percentual.columns:
-                            if bu != 'Total Geral':
-                                st.markdown(f"#### 🏢 {bu}")
-                                
-                                # Criar tabela combinada para este BU
-                                resumo_bu = pd.DataFrame({
-                                    'Sequência': pivot_percentual.index,
-                                    'Percentual': [f"{val:.2f}%" for val in pivot_percentual[bu]],
-                                    'Valor NF': [f"R$ {pivot_valor[bu][idx]:,.2f}" for idx in pivot_percentual.index]
-                                })
-                                
-                                st.dataframe(resumo_bu, use_container_width=True, hide_index=True)
-                        
-                        # Insights principais
+                        # Insights principais (fora das sub-tabs)
                         st.markdown("### 💡 Principais Insights")
                         
                         col1, col2, col3 = st.columns(3)
@@ -1120,8 +1147,8 @@ if sla is not None:
                             st.metric("💰 Valor Total", f"R$ {total_valor:,.2f}")
                         
                         with col3:
-                            num_sequencias = len([seq for seq in pivot_percentual.index if seq != 'Total Geral'])
-                            st.metric("🔢 Sequências Utilizadas", num_sequencias)
+                            total_notas = pivot_contagem.loc['Total Geral', 'Total Geral']
+                            st.metric("📄 Total de Notas", f"{total_notas:,}")
                         
                         # Análise de eficiência
                         if seq_1_perc >= 70:
