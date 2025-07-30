@@ -861,15 +861,22 @@ if sla is not None:
                         # Ajustar posição do texto baseado no tamanho dos valores
                         posicoes, cores_texto = ajustar_posicao_texto(top_ocorrencias.values.tolist())
                         
+                        # Criar DataFrame para o gráfico de ocorrências
+                        df_ocorr = pd.DataFrame({
+                            'Ocorrência': [str(x)[:30] + "..." if len(str(x)) > 30 else str(x) for x in top_ocorrencias.index],
+                            'Quantidade': top_ocorrencias.values
+                        })
+                        
                         fig_ocorr = px.bar(
-                            x=top_ocorrencias.values,
-                            y=[str(x)[:30] + "..." if len(str(x)) > 30 else str(x) for x in top_ocorrencias.index],
+                            df_ocorr,
+                            x='Quantidade',
+                            y='Ocorrência',
                             orientation='h',
                             title="Principais Ocorrências",
-                            labels={'x': 'Quantidade', 'y': 'Ocorrência'},
-                            color=top_ocorrencias.values,
+                            labels={'Quantidade': 'Quantidade', 'Ocorrência': 'Ocorrência'},
+                            color='Quantidade',
                             color_continuous_scale='Reds',
-                            text=top_ocorrencias.values
+                            text='Quantidade'
                         )
                         fig_ocorr.update_layout(height=400, showlegend=False, coloraxis_showscale=False)
                         
@@ -902,14 +909,21 @@ if sla is not None:
                 # Ajustar posição do texto baseado no tamanho dos valores
                 posicoes, cores_texto = ajustar_posicao_texto(mensal_ordenado.values.tolist())
                 
+                # Criar DataFrame para o gráfico
+                df_mensal = pd.DataFrame({
+                    'Mês': mensal_ordenado.index,
+                    'Quantidade': mensal_ordenado.values
+                })
+                
                 fig_mensal = px.bar(
-                    x=mensal_ordenado.index,
-                    y=mensal_ordenado.values,
+                    df_mensal,
+                    x='Mês',
+                    y='Quantidade',
                     title="Volume Total de NFs por Mês",
-                    labels={'x': 'Mês', 'y': 'Quantidade de NFs'},
-                    color=mensal_ordenado.values,
+                    labels={'Mês': 'Mês', 'Quantidade': 'Quantidade de NFs'},
+                    color='Quantidade',
                     color_continuous_scale='Blues',
-                    text=mensal_ordenado.values
+                    text='Quantidade'
                 )
                 fig_mensal.update_layout(height=300, showlegend=False, coloraxis_showscale=False)
                 
@@ -948,12 +962,19 @@ if sla is not None:
                     volume_estados = sla['Estado Destino'].value_counts().head(10)
                     
                     if not volume_estados.empty:
+                        # Criar DataFrame para o gráfico de estados
+                        df_estados = pd.DataFrame({
+                            'Estado': volume_estados.index,
+                            'Quantidade': volume_estados.values
+                        })
+                        
                         fig_estados = px.bar(
-                            x=volume_estados.values,
-                            y=volume_estados.index,
+                            df_estados,
+                            x='Quantidade',
+                            y='Estado',
                             orientation='h',
                             title="📍 Top 10 Estados por Volume",
-                            labels={'x': 'Quantidade de Entregas', 'y': 'Estado'}
+                            labels={'Quantidade': 'Quantidade de Entregas', 'Estado': 'Estado'}
                         )
                         fig_estados.update_layout(height=500)
                         st.plotly_chart(fig_estados, use_container_width=True)
@@ -973,12 +994,19 @@ if sla is not None:
                     volume_transp = sla['Transportador'].value_counts().head(10)
                     
                     if not volume_transp.empty:
+                        # Criar DataFrame para o gráfico de transportadoras
+                        df_transp = pd.DataFrame({
+                            'Transportadora': volume_transp.index,
+                            'Quantidade': volume_transp.values
+                        })
+                        
                         fig_transp = px.bar(
-                            x=volume_transp.values,
-                            y=volume_transp.index,
+                            df_transp,
+                            x='Quantidade',
+                            y='Transportadora',
                             orientation='h',
                             title="🚚 Top 10 Transportadoras por Volume",
-                            labels={'x': 'Quantidade de Entregas', 'y': 'Transportadora'}
+                            labels={'Quantidade': 'Quantidade de Entregas', 'Transportadora': 'Transportadora'}
                         )
                         fig_transp.update_layout(height=500)
                         st.plotly_chart(fig_transp, use_container_width=True)
@@ -1044,12 +1072,19 @@ if sla is not None:
                             
                             # Gráfico de barras
                             if len(soma_seq) <= 20:  # Mostrar gráfico apenas se não houver muitos valores
+                                # Criar DataFrame para o gráfico de contagem
+                                df_contagem = pd.DataFrame({
+                                    'Seq. De Fat': soma_seq.index.astype(str),
+                                    'Quantidade': soma_seq.values
+                                })
+                                
                                 fig_contagem = px.bar(
-                                    x=soma_seq.index.astype(str),
-                                    y=soma_seq.values,
+                                    df_contagem,
+                                    x='Seq. De Fat',
+                                    y='Quantidade',
                                     title="📊 Distribuição de Atendimentos por Seq. De Fat",
-                                    labels={'x': 'Seq. De Fat', 'y': 'Quantidade de Atendimentos'},
-                                    text=soma_seq.values
+                                    labels={'Seq. De Fat': 'Seq. De Fat', 'Quantidade': 'Quantidade de Atendimentos'},
+                                    text='Quantidade'
                                 )
                                 fig_contagem.update_traces(
                                     textposition='outside',
@@ -1098,13 +1133,20 @@ if sla is not None:
                                     
                                     # Gráfico por BU
                                     if len(atendimentos_por_bu) <= 15:
+                                        # Criar DataFrame para o gráfico de BU
+                                        df_bu = pd.DataFrame({
+                                            'Unidade de Negócio': atendimentos_por_bu.index,
+                                            'Total de Atendimentos': atendimentos_por_bu.values
+                                        })
+                                        
                                         fig_bu = px.bar(
-                                            x=atendimentos_por_bu.values,
-                                            y=atendimentos_por_bu.index,
+                                            df_bu,
+                                            x='Total de Atendimentos',
+                                            y='Unidade de Negócio',
                                             orientation='h',
                                             title="🏢 Atendimentos por Unidade de Negócio",
-                                            labels={'x': 'Total de Atendimentos', 'y': 'Unidade de Negócio'},
-                                            text=atendimentos_por_bu.values
+                                            labels={'Total de Atendimentos': 'Total de Atendimentos', 'Unidade de Negócio': 'Unidade de Negócio'},
+                                            text='Total de Atendimentos'
                                         )
                                         fig_bu.update_traces(
                                             textposition='outside',
@@ -1224,13 +1266,20 @@ if sla is not None:
                         # Gráfico de performance
                         transp_ordenada = transp_relevantes.sort_values('% SLA', ascending=True)
                         
+                        # Criar DataFrame para o gráfico de performance SLA
+                        df_performance = pd.DataFrame({
+                            'Transportadora': transp_ordenada.index,
+                            '% SLA': transp_ordenada['% SLA']
+                        })
+                        
                         fig = px.bar(
-                            x=transp_ordenada['% SLA'],
-                            y=transp_ordenada.index,
+                            df_performance,
+                            x='% SLA',
+                            y='Transportadora',
                             orientation='h',
                             title="🎯 Performance SLA por Transportadora",
-                            labels={'x': '% SLA Atingido', 'y': 'Transportadora'},
-                            color=transp_ordenada['% SLA'],
+                            labels={'% SLA': '% SLA Atingido', 'Transportadora': 'Transportadora'},
+                            color='% SLA',
                             color_continuous_scale='RdYlGn'
                         )
                         fig.update_traces(
@@ -1298,13 +1347,20 @@ if sla is not None:
                     pendentes_transp = todas_pendentes['Transportador'].value_counts().head(10)
                     
                     if not pendentes_transp.empty:
+                        # Criar DataFrame para o gráfico de notas pendentes
+                        df_pendentes = pd.DataFrame({
+                            'Transportadora': pendentes_transp.index,
+                            'Quantidade': pendentes_transp.values
+                        })
+                        
                         fig = px.bar(
-                            x=pendentes_transp.values,
-                            y=pendentes_transp.index,
+                            df_pendentes,
+                            x='Quantidade',
+                            y='Transportadora',
                             orientation='h',
                             title="🚚 Notas Pendentes por Transportadora",
-                            labels={'x': 'Quantidade', 'y': 'Transportadora'},
-                            color=pendentes_transp.values,
+                            labels={'Quantidade': 'Quantidade', 'Transportadora': 'Transportadora'},
+                            color='Quantidade',
                             color_continuous_scale='Reds'
                         )
                         fig.update_traces(
