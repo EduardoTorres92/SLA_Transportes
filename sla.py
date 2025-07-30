@@ -461,6 +461,78 @@ if sla is not None:
     # Substituir sla pelos dados filtrados para uso em todas as abas
     sla = sla_filtrado
     
+    # ===== PRINCIPAIS INSIGHTS (TOPO DA PÁGINA) =====
+    st.markdown("## 💡 Principais Insights")
+    st.markdown("---")
+    
+    # Calcular insights a partir dos dados filtrados
+    if not sla.empty and all(col in sla.columns for col in ['Receita', 'Seq. De Fat', 'Valor NF']):
+        # Filtrar apenas registros com Receita = Sim para cálculo dos insights
+        dados_receita_insights = sla[sla['Receita'] == 'Sim'].copy()
+        
+        if not dados_receita_insights.empty:
+            # Calcular métricas de sequência e valores
+            pivot_percentual_insights = pd.crosstab(
+                dados_receita_insights['Seq. De Fat'], 
+                ['Total'], 
+                normalize='columns',
+                margins=True, 
+                margins_name='Total Geral'
+            ) * 100
+            
+            pivot_contagem_insights = pd.crosstab(
+                dados_receita_insights['Seq. De Fat'], 
+                ['Total'], 
+                margins=True, 
+                margins_name='Total Geral'
+            )
+            
+            pivot_valor_insights = dados_receita_insights.groupby('Seq. De Fat')['Valor NF'].sum()
+            total_valor_insights = dados_receita_insights['Valor NF'].sum()
+            
+            # Exibir métricas principais
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                seq_1_perc = pivot_percentual_insights.loc[1, 'Total'] if 1 in pivot_percentual_insights.index else 0
+                st.metric("🎯 Sequência 1 (Ideal)", f"{seq_1_perc:.1f}%", 
+                         help="Quanto maior, melhor - menos retrabalho")
+            
+            with col2:
+                st.metric("💰 Valor Total", f"R$ {total_valor_insights:,.2f}")
+            
+            with col3:
+                total_notas_insights = pivot_contagem_insights.loc['Total Geral', 'Total']
+                st.metric("📄 Total de Notas", f"{total_notas_insights:,}")
+            
+            # Análise de eficiência
+            if seq_1_perc >= 70:
+                st.success(f"✅ **Excelente eficiência:** {seq_1_perc:.1f}% dos pedidos são faturados de uma só vez")
+            elif seq_1_perc >= 60:
+                st.info(f"📊 **Boa eficiência:** {seq_1_perc:.1f}% dos pedidos são faturados de uma só vez")
+            else:
+                st.warning(f"⚠️ **Atenção:** Apenas {seq_1_perc:.1f}% dos pedidos são faturados de uma só vez - muitos retrabalhos")
+        else:
+            st.info("📊 Nenhum registro com Receita = Sim encontrado para cálculo dos insights")
+    else:
+        # Métricas básicas quando não há dados completos
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("📄 Total de Registros", f"{len(sla):,}")
+        
+        with col2:
+            valor_total_basico = sla['Valor NF'].sum() if 'Valor NF' in sla.columns else 0
+            st.metric("💰 Valor Total", f"R$ {valor_total_basico:,.2f}")
+        
+        with col3:
+            transportadoras_unicas = sla['Transportador'].nunique() if 'Transportador' in sla.columns else 0
+            st.metric("🚚 Transportadoras", transportadoras_unicas)
+        
+        st.info("💡 Para insights completos de eficiência, certifique-se de que as colunas 'Receita', 'Seq. De Fat' e 'Valor NF' estejam presentes")
+    
+    st.markdown("---")
+    
     # ===== ABAS PRINCIPAIS =====
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📊 Dashboard Geral", 
@@ -1039,9 +1111,9 @@ if sla is not None:
                         
                         # Tabela detalhada
                         st.dataframe(volume_transp.to_frame(name='Volume de Entregas'), use_container_width=True)
-                    else:
-                        st.info("📊 Dados de Transportador não disponíveis")
                 else:
+                        st.info("📊 Dados de Transportador não disponíveis")
+                    else:
                     st.info("📊 Coluna Transportador não encontrada")
                     
             with tab_contagem:
@@ -1155,32 +1227,6 @@ if sla is not None:
                                         })
                                         
                                         st.dataframe(resumo_bu_abs, use_container_width=True, hide_index=True)
-                        
-                        # Insights principais (fora das sub-tabs)
-                        st.markdown("### 💡 Principais Insights")
-                        
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            seq_1_perc = pivot_percentual.loc[1, 'Total Geral'] if 1 in pivot_percentual.index else 0
-                            st.metric("🎯 Sequência 1 (Ideal)", f"{seq_1_perc:.1f}%", 
-                                     help="Quanto maior, melhor - menos retrabalho")
-                        
-                        with col2:
-                            total_valor = pivot_valor.loc['Total Geral', 'Total Geral']
-                            st.metric("💰 Valor Total", f"R$ {total_valor:,.2f}")
-                        
-                        with col3:
-                            total_notas = pivot_contagem.loc['Total Geral', 'Total Geral']
-                            st.metric("📄 Total de Notas", f"{total_notas:,}")
-                        
-                        # Análise de eficiência
-                        if seq_1_perc >= 70:
-                            st.success(f"✅ **Excelente eficiência:** {seq_1_perc:.1f}% dos pedidos são faturados de uma só vez")
-                        elif seq_1_perc >= 60:
-                            st.info(f"📊 **Boa eficiência:** {seq_1_perc:.1f}% dos pedidos são faturados de uma só vez")
-                        else:
-                            st.warning(f"⚠️ **Atenção:** Apenas {seq_1_perc:.1f}% dos pedidos são faturados de uma só vez - muitos retrabalhos")
                             
                     else:
                         st.warning("⚠️ Nenhum registro encontrado com Receita = Sim")
@@ -1191,7 +1237,7 @@ if sla is not None:
                     
                     st.error(f"❌ Colunas necessárias não encontradas: {', '.join(colunas_faltantes)}")
                     st.info("💡 Colunas necessárias: Receita, Seq. De Fat, Unid Negoc, Valor NF")
-        else:
+            else:
             st.info("📊 Dados não disponíveis para análise de volumetria")
     
     # ===== ABA 3: PERFORMANCE SLA =====
@@ -1239,7 +1285,7 @@ if sla is not None:
                             df_performance,
                             x='% SLA',
                             y='Transportadora',
-                            orientation='h',
+                                    orientation='h',
                             title="🎯 Performance SLA por Transportadora",
                             labels={'% SLA': '% SLA Atingido', 'Transportadora': 'Transportadora'},
                             color='% SLA',
@@ -1260,13 +1306,13 @@ if sla is not None:
                             '% SLA': '🎯 % SLA'
                         })
                         st.dataframe(tabela_exibir.sort_values('🎯 % SLA', ascending=False), use_container_width=True)
-                    else:
+                                else:
                         st.info("📊 Nenhuma transportadora com volume suficiente (min. 10 entregas)")
-                else:
+                                else:
                     st.info("📊 Dados insuficientes para calcular performance")
-            else:
+                            else:
                 st.info("📊 Não há dados suficientes de entregas realizadas")
-        else:
+                        else:
             st.info("📊 Dados necessários para análise de performance não disponíveis")
     
     # ===== ABA 4: GESTÃO DE PENDÊNCIAS =====
@@ -1295,11 +1341,11 @@ if sla is not None:
             if not todas_pendentes.empty:
                 # Métricas principais
                 col1, col2, col3 = st.columns(3)
-                
-                with col1:
+                            
+                            with col1:
                     st.metric("🔴 Total Pendentes", len(todas_pendentes))
-                    
-                with col2:
+                            
+                            with col2:
                     st.metric("⏰ Sem Data Entrega", len(notas_pendentes))
                     
                 with col3:
@@ -1334,13 +1380,13 @@ if sla is not None:
                         
                         # Tabela detalhada
                         st.dataframe(pendentes_transp.to_frame(name='Notas Pendentes'), use_container_width=True)
-                    else:
+                                else:
                         st.info("📊 Dados de transportadora não disponíveis")
-                else:
+                                else:
                     st.info("📊 Coluna Transportador não encontrada")
-            else:
+                            else:
                 st.success("🎉 Parabéns! Não há notas pendentes de entrega no momento!")
-        else:
+                        else:
             st.info("📊 Dados necessários para análise de pendências não disponíveis")
                 
     # ===== ABA 5: BUSCA NF =====
