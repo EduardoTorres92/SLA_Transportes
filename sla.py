@@ -951,10 +951,10 @@ if sla is not None:
                 todas_entregas['Data de Entrega'] = pd.to_datetime(todas_entregas['Data de Entrega'], errors='coerce')
                 todas_entregas['Previsão de Entrega'] = pd.to_datetime(todas_entregas['Previsão de Entrega'], errors='coerce')
                 
-                # Classificar entregas: no prazo, atrasadas ou pendentes
+                # Classificar entregas: apenas no prazo ou atrasadas
                 def classificar_entrega(row):
                     if pd.isna(row['Data de Entrega']):
-                        return 'Entrega Pendente'
+                        return 'Entregue Atrasada'  # Pendentes = Atrasadas
                     elif row['Data de Entrega'] <= row['Previsão de Entrega']:
                         return 'Entregue no Prazo'
                     else:
@@ -1012,7 +1012,7 @@ if sla is not None:
                         ))
                     
                     fig_performance.update_layout(
-                        title='🎯 Performance de SLA - % Entregas no Prazo (min. 10 entregas)',
+                        title='🎯 Performance de SLA - % Entregas no Prazo vs Atrasadas (min. 10 entregas)',
                         xaxis_title='Percentual de Entregas no Prazo (%)',
                         yaxis_title='Transportadora',
                         height=500,
@@ -1031,13 +1031,13 @@ if sla is not None:
                     
                     st.plotly_chart(fig_performance, use_container_width=True, key="performance_sla_transportadoras")
                     
-                    # Gráfico stacked com todas as categorias
-                    st.markdown("### 📊 Distribuição Completa de Status")
+                    # Gráfico stacked com duas categorias
+                    st.markdown("### 📊 Distribuição de Status de Entregas")
                     
                     # Preparar dados para gráfico stacked
                     if not performance_filtrada.empty:
-                        # Garantir que todas as colunas existam
-                        for col in ['Entregue no Prazo', 'Entregue Atrasada', 'Entrega Pendente']:
+                        # Garantir que as duas colunas existam
+                        for col in ['Entregue no Prazo', 'Entregue Atrasada']:
                             if col not in performance_filtrada.columns:
                                 performance_filtrada[col] = 0
                         
@@ -1048,7 +1048,7 @@ if sla is not None:
                         
                         # Entregas no prazo (verde)
                         fig_stacked.add_trace(go.Bar(
-                            name='✅ No Prazo',
+                            name='✅ Entregue no Prazo',
                             y=performance_stacked.index,
                             x=performance_stacked['Entregue no Prazo'],
                             orientation='h',
@@ -1060,7 +1060,7 @@ if sla is not None:
                         
                         # Entregas atrasadas (vermelho)
                         fig_stacked.add_trace(go.Bar(
-                            name='❌ Atrasada',
+                            name='❌ Entregue Atrasada',
                             y=performance_stacked.index,
                             x=performance_stacked['Entregue Atrasada'],
                             orientation='h',
@@ -1070,20 +1070,8 @@ if sla is not None:
                             textfont=dict(color='white', size=10)
                         ))
                         
-                        # Entregas pendentes (laranja)
-                        fig_stacked.add_trace(go.Bar(
-                            name='⏳ Pendente',
-                            y=performance_stacked.index,
-                            x=performance_stacked['Entrega Pendente'],
-                            orientation='h',
-                            marker_color='#ffc107',
-                            text=[f'{val:.1f}%' if val > 5 else '' for val in performance_stacked['Entrega Pendente']],
-                            textposition='inside',
-                            textfont=dict(color='black', size=10)
-                        ))
-                        
                         fig_stacked.update_layout(
-                            title='📈 Distribuição de Status por Transportadora (%)',
+                            title='📈 No Prazo vs Atrasada por Transportadora (%)',
                             xaxis_title='Percentual (%)',
                             yaxis_title='Transportadora',
                             barmode='stack',
@@ -1098,33 +1086,29 @@ if sla is not None:
                         
                         st.plotly_chart(fig_stacked, use_container_width=True, key="distribuicao_status_transportadoras")
                     
-                    # Exibir tabela com dados detalhados incluindo todas as categorias
+                    # Exibir tabela com dados detalhados - apenas duas categorias
                     with st.expander("📊 Dados Detalhados da Performance"):
-                        # Criar tabela completa com todas as categorias
+                        # Criar tabela com duas categorias
                         tabela_performance = performance_transp.loc[transportadoras_relevantes].copy()
                         tabela_performance['Total Entregas'] = tabela_performance.sum(axis=1)
                         
-                        # Calcular percentuais para todas as categorias
+                        # Calcular percentuais para as duas categorias
                         if 'Entregue no Prazo' in tabela_performance.columns:
                             tabela_performance['% No Prazo'] = (tabela_performance['Entregue no Prazo'] / tabela_performance['Total Entregas'] * 100).round(1)
                         if 'Entregue Atrasada' in tabela_performance.columns:
                             tabela_performance['% Atrasada'] = (tabela_performance['Entregue Atrasada'] / tabela_performance['Total Entregas'] * 100).round(1)
-                        if 'Entrega Pendente' in tabela_performance.columns:
-                            tabela_performance['% Pendente'] = (tabela_performance['Entrega Pendente'] / tabela_performance['Total Entregas'] * 100).round(1)
                         
-                        # Selecionar e renomear colunas para exibição completa
-                        colunas_exibir = ['Entregue no Prazo', 'Entregue Atrasada', 'Entrega Pendente', 'Total Entregas', '% No Prazo', '% Atrasada', '% Pendente']
+                        # Selecionar e renomear colunas para exibição
+                        colunas_exibir = ['Entregue no Prazo', 'Entregue Atrasada', 'Total Entregas', '% No Prazo', '% Atrasada']
                         colunas_disponiveis = [col for col in colunas_exibir if col in tabela_performance.columns]
                         
                         tabela_final = tabela_performance[colunas_disponiveis].copy()
                         tabela_final = tabela_final.rename(columns={
-                            'Entregue no Prazo': '✅ No Prazo',
-                            'Entregue Atrasada': '❌ Atrasada',
-                            'Entrega Pendente': '⏳ Pendente',
-                            'Total Entregas': '📦 Total',
+                            'Entregue no Prazo': '✅ Entregue no Prazo',
+                            'Entregue Atrasada': '❌ Entregue Atrasada',
+                            'Total Entregas': '📦 Grand Total',
                             '% No Prazo': '🎯 % No Prazo',
-                            '% Atrasada': '🔴 % Atrasada',
-                            '% Pendente': '⏳ % Pendente'
+                            '% Atrasada': '🔴 % Atrasada'
                         })
                         
                         # Ordenar por performance (melhor primeiro)
