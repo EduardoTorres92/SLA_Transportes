@@ -1111,9 +1111,9 @@ if sla is not None:
                         
                         # Tabela detalhada
                         st.dataframe(volume_transp.to_frame(name='Volume de Entregas'), use_container_width=True)
-                else:
-                        st.info("📊 Dados de Transportador não disponíveis")
                     else:
+                        st.info("📊 Dados de Transportador não disponíveis")
+                else:
                     st.info("📊 Coluna Transportador não encontrada")
                     
             with tab_contagem:
@@ -1237,7 +1237,7 @@ if sla is not None:
                     
                     st.error(f"❌ Colunas necessárias não encontradas: {', '.join(colunas_faltantes)}")
                     st.info("💡 Colunas necessárias: Receita, Seq. De Fat, Unid Negoc, Valor NF")
-            else:
+        else:
             st.info("📊 Dados não disponíveis para análise de volumetria")
     
     # ===== ABA 3: PERFORMANCE SLA =====
@@ -1285,7 +1285,7 @@ if sla is not None:
                             df_performance,
                             x='% SLA',
                             y='Transportadora',
-                                    orientation='h',
+                            orientation='h',
                             title="🎯 Performance SLA por Transportadora",
                             labels={'% SLA': '% SLA Atingido', 'Transportadora': 'Transportadora'},
                             color='% SLA',
@@ -1306,13 +1306,13 @@ if sla is not None:
                             '% SLA': '🎯 % SLA'
                         })
                         st.dataframe(tabela_exibir.sort_values('🎯 % SLA', ascending=False), use_container_width=True)
-                                else:
+                    else:
                         st.info("📊 Nenhuma transportadora com volume suficiente (min. 10 entregas)")
-                                else:
+                else:
                     st.info("📊 Dados insuficientes para calcular performance")
-                            else:
+            else:
                 st.info("📊 Não há dados suficientes de entregas realizadas")
-                        else:
+        else:
             st.info("📊 Dados necessários para análise de performance não disponíveis")
     
     # ===== ABA 4: GESTÃO DE PENDÊNCIAS =====
@@ -1341,13 +1341,13 @@ if sla is not None:
             if not todas_pendentes.empty:
                 # Métricas principais
                 col1, col2, col3 = st.columns(3)
-                            
-                            with col1:
+                
+                with col1:
                     st.metric("🔴 Total Pendentes", len(todas_pendentes))
-                            
-                            with col2:
+                
+                with col2:
                     st.metric("⏰ Sem Data Entrega", len(notas_pendentes))
-                    
+                
                 with col3:
                     st.metric("📅 Entregues Atrasadas", len(notas_atrasadas))
                 
@@ -1380,13 +1380,13 @@ if sla is not None:
                         
                         # Tabela detalhada
                         st.dataframe(pendentes_transp.to_frame(name='Notas Pendentes'), use_container_width=True)
-                                else:
+                    else:
                         st.info("📊 Dados de transportadora não disponíveis")
-                                else:
+                else:
                     st.info("📊 Coluna Transportador não encontrada")
-                            else:
+            else:
                 st.success("🎉 Parabéns! Não há notas pendentes de entrega no momento!")
-                        else:
+        else:
             st.info("📊 Dados necessários para análise de pendências não disponíveis")
                 
     # ===== ABA 5: BUSCA NF =====
