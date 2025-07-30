@@ -1094,15 +1094,14 @@ if sla is not None:
                             
                             for bu in pivot_percentual.columns:
                                 if bu != 'Total Geral':
-                                    st.markdown(f"**🏢 {bu}**")
-                                    
-                                    resumo_bu = pd.DataFrame({
-                                        'Sequência': pivot_percentual.index,
-                                        'Percentual': [f"{val:.2f}%" for val in pivot_percentual[bu]],
-                                        'Valor NF': [f"R$ {pivot_valor[bu][idx]:,.2f}" for idx in pivot_percentual.index]
-                                    })
-                                    
-                                    st.dataframe(resumo_bu, use_container_width=True, hide_index=True)
+                                    with st.expander(f"🏢 {bu}"):
+                                        resumo_bu = pd.DataFrame({
+                                            'Sequência': pivot_percentual.index,
+                                            'Percentual': [f"{val:.2f}%" for val in pivot_percentual[bu]],
+                                            'Valor NF': [f"R$ {pivot_valor[bu][idx]:,.2f}" for idx in pivot_percentual.index]
+                                        })
+                                        
+                                        st.dataframe(resumo_bu, use_container_width=True, hide_index=True)
                         
                         # ===== SUB-TAB NÚMEROS ABSOLUTOS =====
                         with subtab_absoluto:
@@ -1122,15 +1121,14 @@ if sla is not None:
                             
                             for bu in pivot_contagem.columns:
                                 if bu != 'Total Geral':
-                                    st.markdown(f"**🏢 {bu}**")
-                                    
-                                    resumo_bu_abs = pd.DataFrame({
-                                        'Sequência': pivot_contagem.index,
-                                        'Quantidade de Notas': [f"{val:,}" for val in pivot_contagem[bu]],
-                                        'Valor NF': [f"R$ {pivot_valor[bu][idx]:,.2f}" for idx in pivot_contagem.index]
-                                    })
-                                    
-                                    st.dataframe(resumo_bu_abs, use_container_width=True, hide_index=True)
+                                    with st.expander(f"🏢 {bu}"):
+                                        resumo_bu_abs = pd.DataFrame({
+                                            'Sequência': pivot_contagem.index,
+                                            'Quantidade de Notas': [f"{val:,}" for val in pivot_contagem[bu]],
+                                            'Valor NF': [f"R$ {pivot_valor[bu][idx]:,.2f}" for idx in pivot_contagem.index]
+                                        })
+                                        
+                                        st.dataframe(resumo_bu_abs, use_container_width=True, hide_index=True)
                         
                         # Insights principais (fora das sub-tabs)
                         st.markdown("### 💡 Principais Insights")
