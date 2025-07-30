@@ -1162,20 +1162,19 @@ if sla is not None:
                                     # Análise detalhada por BU e Seq
                                     with st.expander("📊 Detalhamento por BU e Sequência"):
                                         try:
-                                            # Usar crosstab mais simples
+                                            # Usar crosstab mais simples - contar ocorrências primeiro
                                             tabela_detalhada = pd.crosstab(
                                                 dados_receita['Unid Negoc'], 
                                                 dados_receita['Seq. De Fat'], 
-                                                values=dados_receita['Seq. De Fat'],
-                                                aggfunc='sum',
-                                                fill_value=0
+                                                margins=True,
+                                                margins_name='Total'
                                             )
                                             st.dataframe(tabela_detalhada, use_container_width=True)
                                         except Exception as e:
                                             st.warning("⚠️ Não foi possível gerar a análise detalhada por sequência")
                                             # Mostrar análise alternativa simples
                                             bu_seq_summary = dados_receita.groupby(['Unid Negoc', 'Seq. De Fat'])['Seq. De Fat'].sum().reset_index()
-                                            bu_seq_summary.columns = ['Unidade de Negócio', 'Seq. De Fat', 'Total Atendimentos']
+                                            bu_seq_summary.columns = ['Unidade de Negócio', 'Sequência', 'Total Atendimentos']
                                             st.dataframe(bu_seq_summary, use_container_width=True, hide_index=True)
                                 else:
                                     st.info("📊 Nenhum dado de Unidade de Negócio disponível")
