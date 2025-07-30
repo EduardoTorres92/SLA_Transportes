@@ -280,14 +280,14 @@ if uploaded_file is not None:
             st.dataframe(sla.head(), use_container_width=True)
             
             # Lista todas as colunas disponíveis
-            with st.expander("📋 Todas as Colunas Disponíveis"):
-                cols_per_row = 3
-                colunas_lista = list(sla.columns)
-                for i in range(0, len(colunas_lista), cols_per_row):
-                    cols = st.columns(cols_per_row)
-                    for j, col_name in enumerate(colunas_lista[i:i+cols_per_row]):
-                        if j < len(cols):
-                            cols[j].markdown(f"• **{col_name}**")
+            st.markdown("### 📋 Todas as Colunas Disponíveis")
+            cols_per_row = 3
+            colunas_lista = list(sla.columns)
+            for i in range(0, len(colunas_lista), cols_per_row):
+                cols = st.columns(cols_per_row)
+                for j, col_name in enumerate(colunas_lista[i:i+cols_per_row]):
+                    if j < len(cols):
+                        cols[j].markdown(f"• **{col_name}**")
         
         st.markdown("---")
     else:
@@ -363,20 +363,6 @@ if sla is not None:
         data_inicio = None
         data_fim = None
     
-    # Filtro por Mês de Entrega (específico para análise de performance)
-    meses_entrega_selecionados = []
-    if 'Mês Entrega' in sla.columns:
-        meses_disponiveis = sorted(sla['Mês Entrega'].dropna().unique().tolist())
-        meses_entrega_selecionados = st.sidebar.multiselect(
-            "📅 Mês de Entrega:",
-            options=meses_disponiveis,
-            default=[],  # Todas selecionadas por padrão
-            help="Filtro específico para análise de performance. Vazio = todos os meses."
-        )
-        # Se nenhuma selecionada, usar todas
-        if not meses_entrega_selecionados:
-            meses_entrega_selecionados = meses_disponiveis
-
     # Filtro por Transportadora (multiselect)
     if 'Transportador' in sla.columns:
         transportadoras_disponiveis = sorted(sla['Transportador'].dropna().unique().tolist())
@@ -412,10 +398,6 @@ if sla is not None:
     if transportadoras_selecionadas and len(transportadoras_selecionadas) < len(transportadoras_disponiveis if 'Transportador' in sla.columns else []):
         sla_filtrado = sla_filtrado[sla_filtrado['Transportador'].isin(transportadoras_selecionadas)]
     
-    # Aplicar filtro de mês de entrega
-    if meses_entrega_selecionados and len(meses_entrega_selecionados) < len(meses_disponiveis if 'Mês Entrega' in sla.columns else []):
-        sla_filtrado = sla_filtrado[sla_filtrado['Mês Entrega'].isin(meses_entrega_selecionados)]
-    
     # Mostrar informações dos dados filtrados
     registros_filtrados = len(sla_filtrado)
     if registros_filtrados != len(sla):
@@ -445,13 +427,6 @@ if sla is not None:
             else:
                 st.sidebar.markdown(f"🚚 **Transportadoras:** {len(transportadoras_selecionadas)} selecionadas")
         
-        # Meses de entrega selecionados
-        if meses_entrega_selecionados and len(meses_entrega_selecionados) < len(meses_disponiveis if 'Mês Entrega' in sla.columns else []):
-            if len(meses_entrega_selecionados) <= 3:
-                st.sidebar.markdown(f"📅 **Meses Entrega:** {', '.join(meses_entrega_selecionados)}")
-            else:
-                st.sidebar.markdown(f"📅 **Meses Entrega:** {len(meses_entrega_selecionados)} selecionados")
-        
         if registros_filtrados == 0:
             st.warning("⚠️ Nenhum registro encontrado com os filtros aplicados. Ajuste os filtros para visualizar dados.")
             st.stop()
@@ -462,9 +437,9 @@ if sla is not None:
     # ===== ABAS PRINCIPAIS =====
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📊 Dashboard Geral", 
+        "📦 Volumetria",
         "🎯 Performance SLA", 
         "🚨 Gestão de Pendências", 
-        "📦 Volumetria",
         "🔍 Busca NF"
     ])
     
@@ -477,16 +452,14 @@ if sla is not None:
             # Calcular métricas principais
             total_nfs = len(sla)
             
-            # Taxa de SLA (usando dados filtrados pelos filtros do sidebar)
+            # Taxa de SLA (assumindo que entregas no prazo são as que têm data de entrega <= previsão)
             try:
-                if 'Status' in sla.columns:
-                    mask_prazo = sla['Status'].str.contains('entregue.*no prazo', case=False, na=False, regex=True)
-                    mask_atrasada = sla['Status'].str.contains('entregue.*atrasada', case=False, na=False, regex=True)
-                    entregas_realizadas = sla[mask_prazo | mask_atrasada]
-                    entregas_no_prazo = len(entregas_realizadas[entregas_realizadas['Status'].str.contains('entregue.*no prazo', case=False, na=False, regex=True)])
-                    taxa_sla = (entregas_no_prazo / len(entregas_realizadas) * 100) if len(entregas_realizadas) > 0 else 0
-                else:
-                    taxa_sla = 0
+                sla['Data de Entrega'] = pd.to_datetime(sla['Data de Entrega'], errors='coerce')
+                sla['Previsão de Entrega'] = pd.to_datetime(sla['Previsão de Entrega'], errors='coerce')
+                
+                entregas_realizadas = sla.dropna(subset=['Data de Entrega', 'Previsão de Entrega'])
+                entregas_no_prazo = len(entregas_realizadas[entregas_realizadas['Data de Entrega'] <= entregas_realizadas['Previsão de Entrega']])
+                taxa_sla = (entregas_no_prazo / len(entregas_realizadas) * 100) if len(entregas_realizadas) > 0 else 0
             except:
                 taxa_sla = 0
                 
@@ -954,174 +927,145 @@ if sla is not None:
                     )
                 st.plotly_chart(fig_mensal, use_container_width=True, key="volume_mensal_dashboard")
     
-    # ===== ABA 2: PERFORMANCE SLA =====
+    # ===== ABA 2: VOLUMETRIA =====
     with tab2:
+        st.header("📦 Volumetria")
+        st.markdown("Análise de volume de entregas por transportadora, estado e região.")
+        
+        if sla is not None:
+            # Exibir informações básicas dos dados
+            st.success(f"✅ Dados carregados com sucesso! Total de {len(sla)} registros")
+            
+            # ===== ABAS DE VOLUMETRIA =====
+            tab_estado, tab_regiao = st.tabs(["🗺️ Por Estado", "🌎 Por Região"])
+            
+            with tab_estado:
+                st.markdown("### 📍 Análise por Estado")
+                
+                if 'Estado Destino' in sla.columns:
+                    # Análise de volume por estado
+                    volume_estados = sla['Estado Destino'].value_counts().head(10)
+                    
+                    if not volume_estados.empty:
+                        fig_estados = px.bar(
+                            x=volume_estados.values,
+                            y=volume_estados.index,
+                            orientation='h',
+                            title="📍 Top 10 Estados por Volume",
+                            labels={'x': 'Quantidade de Entregas', 'y': 'Estado'}
+                        )
+                        fig_estados.update_layout(height=500)
+                        st.plotly_chart(fig_estados, use_container_width=True)
+                        
+                        # Tabela detalhada
+                        st.dataframe(volume_estados.to_frame(name='Volume de Entregas'), use_container_width=True)
+                    else:
+                        st.info("📊 Dados de Estado Destino não disponíveis")
+                else:
+                    st.info("📊 Coluna Estado Destino não encontrada")
+                    
+            with tab_regiao:
+                st.markdown("### 🌎 Análise por Região")
+                
+                if 'Transportador' in sla.columns:
+                    # Análise de volume por transportadora
+                    volume_transp = sla['Transportador'].value_counts().head(10)
+                    
+                    if not volume_transp.empty:
+                        fig_transp = px.bar(
+                            x=volume_transp.values,
+                            y=volume_transp.index,
+                            orientation='h',
+                            title="🚚 Top 10 Transportadoras por Volume",
+                            labels={'x': 'Quantidade de Entregas', 'y': 'Transportadora'}
+                        )
+                        fig_transp.update_layout(height=500)
+                        st.plotly_chart(fig_transp, use_container_width=True)
+                        
+                        # Tabela detalhada
+                        st.dataframe(volume_transp.to_frame(name='Volume de Entregas'), use_container_width=True)
+                    else:
+                        st.info("📊 Dados de Transportador não disponíveis")
+                else:
+                    st.info("📊 Coluna Transportador não encontrada")
+        else:
+            st.info("📊 Dados não disponíveis para análise de volumetria")
+    
+    # ===== ABA 3: PERFORMANCE SLA =====
+    with tab3:
         st.header("🎯 Performance de SLA")
         st.markdown("Análise detalhada da performance de entrega por transportadora e status.")
-        st.info("ℹ️ **Importante:** Esta análise respeita os filtros aplicados no menu lateral (BU, Data, Transportadora).")
         
-        if all(col in sla.columns for col in ['Transportador', 'Status']):
-            # DEBUG: Mostrar informações sobre filtros aplicados
-            st.write("### 🔍 DEBUG - Informações dos Filtros Aplicados")
-            st.write(f"**Total de registros após filtros:** {len(sla)}")
-            
-            # Verificar se existe coluna de mês
-            if 'Mês Entrega' in sla.columns:
-                st.write("**Distribuição por Mês Entrega (dados filtrados):**")
-                meses_distribuicao = sla['Mês Entrega'].value_counts().sort_index()
-                st.write(meses_distribuicao)
-                
-                if len(meses_distribuicao) == 1:
-                    mes_analisado = meses_distribuicao.index[0]
-                    st.info(f"🎯 **Analisando especificamente o mês: {mes_analisado}**")
-                elif len(meses_distribuicao) <= 3:
-                    meses_analisados = ", ".join(meses_distribuicao.index.tolist())
-                    st.info(f"🎯 **Analisando os meses: {meses_analisados}**")
-            
-            # Filtrar apenas entregas com status específicos conforme solicitado (DADOS FILTRADOS)
-            # Buscar especificamente por status que começam com "Entregue"
-            mask_prazo = sla['Status'].str.contains('entregue.*no prazo', case=False, na=False, regex=True)
-            mask_atrasada = sla['Status'].str.contains('entregue.*atrasada', case=False, na=False, regex=True)
-            entregas_realizadas = sla[mask_prazo | mask_atrasada].copy()
-            
-            st.write(f"**Registros com status válidos (Entregue):** {len(entregas_realizadas)}")
-            if not entregas_realizadas.empty:
-                st.write("**Status válidos encontrados:**")
-                st.write(entregas_realizadas['Status'].value_counts())
+        if all(col in sla.columns for col in ['Transportador', 'Data de Entrega', 'Previsão de Entrega']):
+            # Filtrar apenas entregas realizadas (com data de entrega)
+            entregas_realizadas = sla.dropna(subset=['Data de Entrega', 'Previsão de Entrega', 'Transportador'])
             
             if not entregas_realizadas.empty:
-                # Usar a coluna Status original para o cálculo de performance
-                # Classificar baseado no conteúdo do status
-                def classificar_status(status):
-                    if pd.isna(status):
-                        return 'Outros'
-                    status_lower = str(status).lower()
-                    if 'entregue' in status_lower and 'no prazo' in status_lower:
-                        return 'Entregue no Prazo'
-                    elif 'entregue' in status_lower and 'atrasada' in status_lower:
-                        return 'Entregue Atrasada'
-                    else:
-                        return 'Outros'
+                # Garantir que as datas estão no formato correto
+                entregas_realizadas = entregas_realizadas.copy()
+                entregas_realizadas['Data de Entrega'] = pd.to_datetime(entregas_realizadas['Data de Entrega'], errors='coerce')
+                entregas_realizadas['Previsão de Entrega'] = pd.to_datetime(entregas_realizadas['Previsão de Entrega'], errors='coerce')
                 
-                entregas_realizadas['Status_Entrega'] = entregas_realizadas['Status'].apply(classificar_status)
+                # Classificar entregas como no prazo ou atrasadas
+                entregas_realizadas['Status_Entrega'] = entregas_realizadas.apply(
+                    lambda row: 'Entregue no Prazo' if row['Data de Entrega'] <= row['Previsão de Entrega'] else 'Entregue Atrasada',
+                    axis=1
+                )
                 
-                # Agrupar por transportadora e status de entrega
+                # Performance por transportadora
                 performance_transp = entregas_realizadas.groupby(['Transportador', 'Status_Entrega']).size().unstack(fill_value=0)
                 
-                # Calcular percentuais
-                performance_transp_pct = performance_transp.div(performance_transp.sum(axis=1), axis=0) * 100
-                
-                # DEBUG: Mostrar comparação com sua tabela
-                st.write("### 📊 Percentuais Calculados vs Sua Tabela")
-                st.dataframe(performance_transp_pct.round(1))
-                
-                # Filtrar apenas transportadoras com pelo menos 10 entregas para análise consistente
-                total_entregas = performance_transp.sum(axis=1)
-                transportadoras_relevantes = total_entregas[total_entregas >= 10].index
-                performance_filtrada = performance_transp_pct.loc[transportadoras_relevantes]
-                
-                if not performance_filtrada.empty:
-                    # Ordenar por percentual de entregas no prazo (descendente)
-                    if 'Entregue no Prazo' in performance_filtrada.columns:
-                        performance_filtrada = performance_filtrada.sort_values('Entregue no Prazo', ascending=False)
+                if 'Entregue no Prazo' in performance_transp.columns:
+                    performance_transp['Total'] = performance_transp.sum(axis=1)
+                    performance_transp['% SLA'] = (performance_transp['Entregue no Prazo'] / performance_transp['Total'] * 100).round(1)
                     
-                    # Preparar dados para o gráfico
-                    transportadoras = performance_filtrada.index.tolist()
+                    # Filtrar transportadoras com pelo menos 10 entregas
+                    transp_relevantes = performance_transp[performance_transp['Total'] >= 10]
                     
-                    # Criar gráfico de barras simples - apenas entregas no prazo
-                    fig_performance = go.Figure()
-                    
-                    if 'Entregue no Prazo' in performance_filtrada.columns:
-                        # Ordenar por performance (do maior para o menor)
-                        performance_ordenada = performance_filtrada.sort_values('Entregue no Prazo', ascending=True)
+                    if not transp_relevantes.empty:
+                        # Gráfico de performance
+                        transp_ordenada = transp_relevantes.sort_values('% SLA', ascending=True)
                         
-                        # Cores gradientes baseadas na performance
-                        cores = []
-                        for val in performance_ordenada['Entregue no Prazo']:
-                            if val >= 95:
-                                cores.append('#008000')  # Verde escuro - Excelente
-                            elif val >= 85:
-                                cores.append('#32CD32')  # Verde - Bom
-                            elif val >= 70:
-                                cores.append('#FFA500')  # Laranja - Atenção
-                            else:
-                                cores.append('#FF4500')  # Vermelho - Crítico
-                        
-                        fig_performance.add_trace(go.Bar(
-                            x=performance_ordenada['Entregue no Prazo'],
-                            y=performance_ordenada.index,
+                        fig = px.bar(
+                            x=transp_ordenada['% SLA'],
+                            y=transp_ordenada.index,
                             orientation='h',
-                            marker_color=cores,
-                            text=[f'{val:.1f}%' for val in performance_ordenada['Entregue no Prazo']],
-                            textposition='inside',
-                            textfont=dict(color='white', size=11, family='Arial Black'),
-                            hovertemplate='<b>%{y}</b><br>Performance: %{x:.1f}%<extra></extra>'
-                        ))
-                    
-                    fig_performance.update_layout(
-                        title='🎯 Performance de SLA - % Entregas no Prazo (min. 10 entregas)',
-                        xaxis_title='Percentual de Entregas no Prazo (%)',
-                        yaxis_title='Transportadora',
-                        height=500,
-                        showlegend=False,
-                        plot_bgcolor='rgba(0,0,0,0)',
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        xaxis=dict(
-                            showgrid=True, 
-                            gridwidth=1, 
-                            gridcolor='LightGray',
-                            range=[0, 100]
-                        ),
-                        yaxis=dict(showgrid=False),
-                        margin=dict(l=20, r=20, t=60, b=20)
-                    )
-                    
-                    st.plotly_chart(fig_performance, use_container_width=True, key="performance_sla_transportadoras")
-                    
-                    # Exibir tabela com dados focados na performance
-                    with st.expander("📊 Dados Detalhados da Performance"):
-                        # Criar tabela com foco nas entregas no prazo
-                        tabela_performance = performance_transp.loc[transportadoras_relevantes].copy()
-                        tabela_performance['Total Entregas'] = tabela_performance.sum(axis=1)
+                            title="🎯 Performance SLA por Transportadora",
+                            labels={'x': '% SLA Atingido', 'y': 'Transportadora'},
+                            color=transp_ordenada['% SLA'],
+                            color_continuous_scale='RdYlGn'
+                        )
+                        fig.update_layout(height=500, showlegend=False)
+                        st.plotly_chart(fig, use_container_width=True)
                         
-                        # Focar apenas nas entregas no prazo
-                        if 'Entregue no Prazo' in tabela_performance.columns:
-                            tabela_performance['% SLA Atingido'] = (tabela_performance['Entregue no Prazo'] / tabela_performance['Total Entregas'] * 100).round(1)
-                        
-                        # Selecionar e renomear colunas para exibição
-                        colunas_exibir = ['Entregue no Prazo', 'Total Entregas', '% SLA Atingido']
-                        colunas_disponiveis = [col for col in colunas_exibir if col in tabela_performance.columns]
-                        
-                        tabela_final = tabela_performance[colunas_disponiveis].copy()
-                        tabela_final = tabela_final.rename(columns={
-                            'Entregue no Prazo': '✅ Entregas no Prazo',
-                            'Total Entregas': '📦 Total de Entregas',
-                            '% SLA Atingido': '🎯 % SLA Atingido'
+                        # Tabela de performance
+                        tabela_exibir = transp_ordenada[['Entregue no Prazo', 'Entregue Atrasada', 'Total', '% SLA']].copy()
+                        tabela_exibir = tabela_exibir.rename(columns={
+                            'Entregue no Prazo': '✅ No Prazo',
+                            'Entregue Atrasada': '❌ Atrasada',
+                            'Total': '📦 Total',
+                            '% SLA': '🎯 % SLA'
                         })
-                        
-                        # Ordenar por performance (melhor primeiro)
-                        if '🎯 % SLA Atingido' in tabela_final.columns:
-                            tabela_final = tabela_final.sort_values('🎯 % SLA Atingido', ascending=False)
-                        
-                        st.dataframe(tabela_final, use_container_width=True)
+                        st.dataframe(tabela_exibir.sort_values('🎯 % SLA', ascending=False), use_container_width=True)
+                    else:
+                        st.info("📊 Nenhuma transportadora com volume suficiente (min. 10 entregas)")
                 else:
-                    st.info("📊 Nenhuma transportadora com volume suficiente (min. 10 entregas) para análise")
+                    st.info("📊 Dados insuficientes para calcular performance")
             else:
-                st.info("📊 Não há dados suficientes de entregas realizadas para análise")
+                st.info("📊 Não há dados suficientes de entregas realizadas")
         else:
             st.info("📊 Dados necessários para análise de performance não disponíveis")
     
-    # ===== ABA 3: GESTÃO DE PENDÊNCIAS =====
-    with tab3:
+    # ===== ABA 4: GESTÃO DE PENDÊNCIAS =====
+    with tab4:
         st.header("🚨 Gestão de Pendências")
         st.markdown("Análise e gerenciamento de notas fiscais pendentes de entrega.")
         
         if all(col in sla.columns for col in ['Data de Entrega', 'Previsão de Entrega', 'Transportador']):
-            # Filtrar notas pendentes (sem data de entrega ou atrasadas)
-            # Notas sem data de entrega (pendentes)
+            # Identificar notas pendentes
             notas_pendentes = sla[sla['Data de Entrega'].isna()].copy()
             
-            # Notas com data de entrega mas atrasadas
+            # Notas atrasadas (entregues após a previsão)
             sla_temp = sla.copy()
             sla_temp['Data de Entrega'] = pd.to_datetime(sla_temp['Data de Entrega'], errors='coerce')
             sla_temp['Previsão de Entrega'] = pd.to_datetime(sla_temp['Previsão de Entrega'], errors='coerce')
@@ -1136,637 +1080,45 @@ if sla is not None:
             todas_pendentes = pd.concat([notas_pendentes, notas_atrasadas], ignore_index=True)
             
             if not todas_pendentes.empty:
-                # Filtro por transportadora
-                transportadoras_com_pendencias = ['TODAS'] + sorted(todas_pendentes['Transportador'].dropna().unique().tolist())
-                
-                transportadora_filtro = st.selectbox(
-                    "🚚 Filtrar por Transportadora:",
-                    options=transportadoras_com_pendencias,
-                    index=0,
-                    key="filtro_pendentes"
-                )
-                
-                # Aplicar filtro se não for "TODAS"
-                if transportadora_filtro != "TODAS":
-                    todas_pendentes_filtradas = todas_pendentes[todas_pendentes['Transportador'] == transportadora_filtro].copy()
-                    notas_pendentes_filtradas = notas_pendentes[notas_pendentes['Transportador'] == transportadora_filtro].copy()
-                    notas_atrasadas_filtradas = notas_atrasadas[notas_atrasadas['Transportador'] == transportadora_filtro].copy()
-                else:
-                    todas_pendentes_filtradas = todas_pendentes.copy()
-                    notas_pendentes_filtradas = notas_pendentes.copy()
-                    notas_atrasadas_filtradas = notas_atrasadas.copy()
-                
-                # Métricas gerais (usando dados filtrados)
-                col1, col2, col3, col4 = st.columns(4)
+                # Métricas principais
+                col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    st.metric("🔴 Total Pendentes", len(todas_pendentes_filtradas))
+                    st.metric("🔴 Total Pendentes", len(todas_pendentes))
                     
                 with col2:
-                    st.metric("⏰ Sem Data Entrega", len(notas_pendentes_filtradas))
+                    st.metric("⏰ Sem Data Entrega", len(notas_pendentes))
                     
                 with col3:
-                    st.metric("📅 Entregues Atrasadas", len(notas_atrasadas_filtradas))
+                    st.metric("📅 Entregues Atrasadas", len(notas_atrasadas))
+                
+                # Gráfico por transportadora
+                if 'Transportador' in todas_pendentes.columns:
+                    pendentes_transp = todas_pendentes['Transportador'].value_counts().head(10)
                     
-                with col4:
-                    if transportadora_filtro != "TODAS":
-                        # Calcular % baseado no total da transportadora selecionada
-                        total_transportadora = len(sla[sla['Transportador'] == transportadora_filtro]) if transportadora_filtro in sla['Transportador'].values else 1
-                        pct_pendentes = (len(todas_pendentes_filtradas) / total_transportadora * 100) if total_transportadora > 0 else 0
-                        st.metric("📊 % da Transportadora", f"{pct_pendentes:.1f}%")
-                    else:
-                        pct_pendentes = (len(todas_pendentes_filtradas) / len(sla) * 100) if len(sla) > 0 else 0
-                        st.metric("📊 % do Total", f"{pct_pendentes:.1f}%")
-                
-                # Gráficos de análise
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    if transportadora_filtro != "TODAS":
-                        st.markdown(f"**📅 Pendentes por Mês - {transportadora_filtro}**")
-                        
-                        if 'Mês Nota' in todas_pendentes_filtradas.columns and not todas_pendentes_filtradas.empty:
-                            pendentes_mes = todas_pendentes_filtradas['Mês Nota'].value_counts()
-                            pendentes_mes_ordenado = ordenar_meses(pendentes_mes)
-                            
-                            if not pendentes_mes_ordenado.empty:
-                                # Ajustar posição do texto baseado no tamanho dos valores
-                                posicoes, cores_texto = ajustar_posicao_texto(pendentes_mes_ordenado.values.tolist())
-                                
-                                fig_pend_mes = px.bar(
-                                    x=pendentes_mes_ordenado.index,
-                                    y=pendentes_mes_ordenado.values,
-                                    title=f"Pendentes por Mês - {transportadora_filtro}",
-                                    labels={'x': 'Mês', 'y': 'Quantidade'},
-                                    color=pendentes_mes_ordenado.values,
-                                    color_continuous_scale='Oranges',
-                                    text=pendentes_mes_ordenado.values
-                                )
-                                fig_pend_mes.update_layout(height=400, showlegend=False, coloraxis_showscale=False)
-                                
-                                # Aplicar posições de texto inteligentes
-                                if len(set(posicoes)) == 1:  # Se todas têm a mesma posição
-                                    fig_pend_mes.update_traces(
-                                        textposition=posicoes[0],
-                                        textfont=dict(color=cores_texto[0], size=11, family='Arial Black'),
-                                        hovertemplate='<b>%{x}</b><br>Pendentes: %{y}<extra></extra>'
-                                    )
-                                else:  # Posições mistas - usar auto
-                                    fig_pend_mes.update_traces(
-                                        textposition='auto',
-                                        textfont=dict(color='black', size=11, family='Arial Black'),
-                                        hovertemplate='<b>%{x}</b><br>Pendentes: %{y}<extra></extra>'
-                                    )
-                                st.plotly_chart(fig_pend_mes, use_container_width=True, key="pendentes_mes_transportadora")
-                            else:
-                                st.info("✅ Nenhuma pendência nesta transportadora!")
-                        else:
-                            st.info("✅ Nenhuma pendência nesta transportadora!")
-                    else:
-                        st.markdown("**🚚 Pendentes por Transportadora**")
-                        
-                        if 'Transportador' in todas_pendentes_filtradas.columns:
-                            pendentes_transp = todas_pendentes_filtradas['Transportador'].value_counts().head(10)
-                            
-                            # Ajustar posição do texto baseado no tamanho dos valores
-                            posicoes, cores_texto = ajustar_posicao_texto(pendentes_transp.values.tolist())
-                            
-                            fig_pend_transp = px.bar(
-                                x=pendentes_transp.values,
-                                y=pendentes_transp.index,
-                                orientation='h',
-                                title="Notas Pendentes por Transportadora",
-                                labels={'x': 'Quantidade', 'y': 'Transportadora'},
-                                color=pendentes_transp.values,
-                                color_continuous_scale='Reds',
-                                text=pendentes_transp.values
-                            )
-                            fig_pend_transp.update_layout(height=400, showlegend=False, coloraxis_showscale=False)
-                            
-                            # Aplicar posições de texto inteligentes
-                            if len(set(posicoes)) == 1:  # Se todas têm a mesma posição
-                                fig_pend_transp.update_traces(
-                                    textposition=posicoes[0],
-                                    textfont=dict(color=cores_texto[0], size=11, family='Arial Black'),
-                                    hovertemplate='<b>%{y}</b><br>Pendentes: %{x}<extra></extra>'
-                                )
-                            else:  # Posições mistas - usar auto
-                                fig_pend_transp.update_traces(
-                                    textposition='auto',
-                                    textfont=dict(color='black', size=11, family='Arial Black'),
-                                    hovertemplate='<b>%{y}</b><br>Pendentes: %{x}<extra></extra>'
-                                )
-                            st.plotly_chart(fig_pend_transp, use_container_width=True, key="pendentes_transportadora")
-                        else:
-                            st.info("Dados de transportadora não disponíveis")
-                
-                with col2:
-                    st.markdown("**📅 Pendentes por Mês**")
-                    
-                    if 'Mês Nota' in todas_pendentes_filtradas.columns:
-                        pendentes_mes = todas_pendentes_filtradas['Mês Nota'].value_counts()
-                        pendentes_mes_ordenado = ordenar_meses(pendentes_mes)
-                        
-                        if not pendentes_mes_ordenado.empty:
-                            # Ajustar posição do texto baseado no tamanho dos valores
-                            posicoes, cores_texto = ajustar_posicao_texto(pendentes_mes_ordenado.values.tolist())
-                            
-                            fig_pend_mes = px.bar(
-                                x=pendentes_mes_ordenado.index,
-                                y=pendentes_mes_ordenado.values,
-                                title="Notas Pendentes por Mês",
-                                labels={'x': 'Mês', 'y': 'Quantidade'},
-                                color=pendentes_mes_ordenado.values,
-                                color_continuous_scale='Oranges',
-                                text=pendentes_mes_ordenado.values
-                            )
-                            fig_pend_mes.update_layout(height=400, showlegend=False, coloraxis_showscale=False)
-                            
-                            # Aplicar posições de texto inteligentes
-                            if len(set(posicoes)) == 1:  # Se todas têm a mesma posição
-                                fig_pend_mes.update_traces(
-                                    textposition=posicoes[0],
-                                    textfont=dict(color=cores_texto[0], size=11, family='Arial Black'),
-                                    hovertemplate='<b>%{x}</b><br>Pendentes: %{y}<extra></extra>'
-                                )
-                            else:  # Posições mistas - usar auto
-                                fig_pend_mes.update_traces(
-                                    textposition='auto',
-                                    textfont=dict(color='black', size=11, family='Arial Black'),
-                                    hovertemplate='<b>%{x}</b><br>Pendentes: %{y}<extra></extra>'
-                                )
-                            st.plotly_chart(fig_pend_mes, use_container_width=True, key="pendentes_mes_geral")
-                        else:
-                            st.info("✅ Nenhuma pendência encontrada!")
-                    else:
-                        st.info("Dados de mês não disponíveis")
-                
-                # Tabela detalhada das pendentes (usando dados filtrados)
-                with st.expander(f"📋 Lista Detalhada de Notas Pendentes{' - ' + transportadora_filtro if transportadora_filtro != 'TODAS' else ''}"):
-                    colunas_exibir = ['Numero', 'Transportador', 'Mês Nota', 'Previsão de Entrega', 'Data de Entrega', 'Status']
-                    colunas_disponiveis = [col for col in colunas_exibir if col in todas_pendentes_filtradas.columns]
-                    
-                    if colunas_disponiveis and not todas_pendentes_filtradas.empty:
-                        tabela_pendentes = todas_pendentes_filtradas[colunas_disponiveis].copy()
-                        
-                        # Formatar datas se disponíveis
-                        if 'Previsão de Entrega' in tabela_pendentes.columns:
-                            tabela_pendentes['Previsão de Entrega'] = pd.to_datetime(tabela_pendentes['Previsão de Entrega'], errors='coerce').dt.strftime('%d-%m-%Y')
-                        if 'Data de Entrega' in tabela_pendentes.columns:
-                            tabela_pendentes['Data de Entrega'] = pd.to_datetime(tabela_pendentes['Data de Entrega'], errors='coerce').dt.strftime('%d-%m-%Y')
-                        
-                        # Ordenar por transportadora e depois por mês
-                        if 'Transportador' in tabela_pendentes.columns:
-                            tabela_pendentes = tabela_pendentes.sort_values(['Transportador', 'Mês Nota'] if 'Mês Nota' in tabela_pendentes.columns else ['Transportador'])
-                        
-                        st.dataframe(
-                            tabela_pendentes, 
-                            use_container_width=True,
-                            hide_index=True,
-                            height=400
+                    if not pendentes_transp.empty:
+                        fig = px.bar(
+                            x=pendentes_transp.values,
+                            y=pendentes_transp.index,
+                            orientation='h',
+                            title="🚚 Notas Pendentes por Transportadora",
+                            labels={'x': 'Quantidade', 'y': 'Transportadora'},
+                            color=pendentes_transp.values,
+                            color_continuous_scale='Reds'
                         )
+                        fig.update_layout(height=500, showlegend=False)
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Tabela detalhada
+                        st.dataframe(pendentes_transp.to_frame(name='Notas Pendentes'), use_container_width=True)
                     else:
-                        st.info("✅ Nenhuma nota pendente encontrada para os filtros aplicados!")
-                
-                # Insights e ações (usando dados filtrados)
-                st.markdown("### 💡 Insights e Ações Recomendadas")
-                
-                if not todas_pendentes_filtradas.empty and 'Transportador' in todas_pendentes_filtradas.columns:
-                    if transportadora_filtro != "TODAS":
-                        # Insights específicos da transportadora selecionada
-                        total_transportadora = len(sla[sla['Transportador'] == transportadora_filtro]) if transportadora_filtro in sla['Transportador'].values else 1
-                        
-                        st.error(f"""
-                        **🚨 Situação da Transportadora {transportadora_filtro}:**
-                        - **{len(todas_pendentes_filtradas)} notas pendentes** 
-                        - **{len(notas_pendentes_filtradas)} sem data de entrega** | **{len(notas_atrasadas_filtradas)} entregues atrasadas**
-                        - **{pct_pendentes:.1f}%** das entregas desta transportadora estão pendentes
-                        """)
-                        
-                        st.warning(f"""
-                        **⚡ Ações Específicas para {transportadora_filtro}:**
-                        - Contato imediato para esclarecimentos sobre as {len(todas_pendentes_filtradas)} pendências
-                        - Solicitar cronograma de regularização
-                        - Avaliar penalidades contratuais aplicáveis
-                        - Considerar suspensão temporária de novos envios
-                        """)
-                    else:
-                        # Insights gerais (quando "TODAS" está selecionado)
-                        pior_transportadora = todas_pendentes_filtradas['Transportador'].value_counts().index[0]
-                        qtd_pior = todas_pendentes_filtradas['Transportador'].value_counts().iloc[0]
-                        
-                        st.error(f"""
-                        **🚨 Situação Crítica Geral:**
-                        - **{pior_transportadora}** tem **{qtd_pior} notas pendentes** (maior volume)
-                        - Total de **{len(todas_pendentes_filtradas)} notas** necessitam atenção imediata
-                        - **{pct_pendentes:.1f}%** do total de entregas estão pendentes
-                        """)
-                        
-                        st.warning(f"""
-                        **⚡ Ações Recomendadas:**
-                        - Priorizar contato com a transportadora **{pior_transportadora}**
-                        - Revisar contratos e penalidades de SLA
-                        - Implementar monitoramento em tempo real
-                        - Considerar transportadoras alternativas para novos envios
-                        """)
+                        st.info("📊 Dados de transportadora não disponíveis")
                 else:
-                    st.success(f"""
-                    **🎉 Excelente!**
-                    - {'Nenhuma pendência para a transportadora selecionada!' if transportadora_filtro != 'TODAS' else 'Nenhuma nota pendente no momento!'}
-                    - Continue o bom trabalho de monitoramento!
-                    """)
-                
+                    st.info("📊 Coluna Transportador não encontrada")
             else:
                 st.success("🎉 Parabéns! Não há notas pendentes de entrega no momento!")
         else:
             st.info("📊 Dados necessários para análise de pendências não disponíveis")
-    
-    # ===== ABA 4: ANÁLISE OPERACIONAL =====
-    with tab4:
-        st.header("📦 Volumetria")
-        st.markdown("Análise detalhada de operações, custos e eficiência.")
-        
-        if sla is not None:
-            # Exibir informações básicas dos dados
-            st.success(f"✅ Dados carregados com sucesso! Total de {len(sla)} registros")
-            
-            # ===== ABAS PRINCIPAIS =====
-            tab1, tab2 = st.tabs(["🗺️ Por Estado", "🌎 Por Região"])
-            
-            with tab1:
-                st.markdown("### 📍 Análise por Estado")
-                
-                if all(col in sla.columns for col in ['Estado Destino', 'Faixa de Peso']):
-                    # Filtro por estado (multiselect)
-                    estados_disponiveis = sorted(sla['Estado Destino'].dropna().unique().tolist())
-                    
-                    estados_selecionados = st.multiselect(
-                        "🗺️ Selecione os Estados para Análise:",
-                        options=estados_disponiveis,
-                        default=estados_disponiveis,  # Todos selecionados por padrão
-                        key="filtro_peso_estado",
-                        help="Selecione um ou mais estados. Vazio = todos os estados."
-                    )
-                    
-                    # Se nenhum selecionado, usar todos
-                    if not estados_selecionados:
-                        estados_selecionados = estados_disponiveis
-                    
-                    # Aplicar filtro multiselect
-                    if len(estados_selecionados) < len(estados_disponiveis):
-                        dados_filtrados = sla[sla['Estado Destino'].isin(estados_selecionados)].copy()
-                        titulo_estado = f"Estados: {', '.join(estados_selecionados[:3])}" + ("..." if len(estados_selecionados) > 3 else "")
-                    else:
-                        dados_filtrados = sla.copy()
-                        titulo_estado = "TODOS"
-                    
-                    if not dados_filtrados.empty and 'Faixa de Peso' in dados_filtrados.columns:
-                        # Calcular distribuição por faixa de peso
-                        faixa_peso_counts = dados_filtrados['Faixa de Peso'].value_counts()
-                        total_entregas = len(dados_filtrados)
-                        
-                        if not faixa_peso_counts.empty:
-                            # Preparar dados para o gráfico de pizza
-                            faixas = faixa_peso_counts.index.tolist()
-                            percentuais = (faixa_peso_counts.values / total_entregas * 100).round(1)
-                            
-                            col1, col2 = st.columns([2, 1])
-                            
-                            with col1:
-                                # Criar gráfico de barras horizontais
-                                fig_barras = px.bar(
-                                    x=faixa_peso_counts.values,
-                                    y=faixa_peso_counts.index,
-                                    orientation='h',
-                                    title=f"🎯 Distribuição por Faixa de Peso - {titulo_estado}",
-                                    labels={'x': 'Quantidade de Entregas', 'y': 'Faixa de Peso'},
-                                    color=faixa_peso_counts.values,
-                                    color_continuous_scale='jet'
-                                )
-                                
-                                fig_barras.update_traces(
-                                    text=[f'{val} ({(val/total_entregas*100):.1f}%)' for val in faixa_peso_counts.values],
-                                    textposition='outside',
-                                    textfont=dict(color='black', size=10, family='Arial Black'),
-                                    hovertemplate='<b>%{y}</b><br>' +
-                                                  'Quantidade: %{x}<br>' +
-                                                  'Percentual: %{text}<br>' +
-                                                  '<extra></extra>'
-                                )
-                                
-                                fig_barras.update_layout(
-                                    height=500,
-                                    showlegend=False,
-                                    coloraxis_showscale=False,
-                                    title=dict(
-                                        x=0.5,
-                                        font=dict(size=14, family="Arial Black")
-                                    ),
-                                    plot_bgcolor='rgba(0,0,0,0)',
-                                    paper_bgcolor='rgba(0,0,0,0)',
-                                    xaxis=dict(showgrid=True, gridwidth=1, gridcolor='LightGray'),
-                                    yaxis=dict(showgrid=False),
-                                    margin=dict(l=20, r=80, t=60, b=20)
-                                )
-                                
-                                st.plotly_chart(fig_barras, use_container_width=True, key="faixa_peso_estado")
-                            
-                            with col2:
-                                # Métricas complementares
-                                st.markdown("### 📊 Estatísticas")
-                                
-                                # Faixa predominante
-                                faixa_principal = faixa_peso_counts.index[0]
-                                pct_principal = percentuais[list(faixas).index(faixa_principal)]
-                                
-                                st.metric("🎯 Faixa Predominante", faixa_principal)
-                                st.metric("📊 Participação", f"{pct_principal:.1f}%")
-                                st.metric("📦 Total de Entregas", f"{total_entregas:,}".replace(",", "."))
-                                
-                                # Informações adicionais
-                                if 'Peso Bruto NF' in dados_filtrados.columns:
-                                    peso_medio = dados_filtrados['Peso Bruto NF'].mean()
-                                    if not pd.isna(peso_medio):
-                                        st.metric("⚖️ Peso Médio", f"{peso_medio:.1f} kg")
-                                
-                                # Top 3 faixas
-                                st.markdown("#### 🏆 Top 3 Faixas")
-                                for i, (faixa, count) in enumerate(faixa_peso_counts.head(3).items(), 1):
-                                    pct = (count / total_entregas * 100)
-                                    st.write(f"**{i}º** {faixa}: {pct:.1f}%")
-                            
-                            # Tabela detalhada
-                            with st.expander(f"📋 Distribuição Detalhada - {titulo_estado}"):
-                                # Criar tabela com dados completos
-                                tabela_faixas = pd.DataFrame({
-                                    'Faixa de Peso': faixa_peso_counts.index,
-                                    'Quantidade': faixa_peso_counts.values,
-                                    'Percentual (%)': percentuais
-                                })
-                                
-                                # Ordenar por quantidade (maior para menor)
-                                tabela_faixas = tabela_faixas.sort_values('Quantidade', ascending=False)
-                                
-                                st.dataframe(
-                                    tabela_faixas,
-                                    use_container_width=True,
-                                    hide_index=True,
-                                    height=300
-                                )
-                            
-                            # Insights automáticos
-                            st.markdown("### 💡 Insights da Análise")
-                            
-                            # Análise de concentração
-                            concentracao_top3 = sum(percentuais[:3]) if len(percentuais) >= 3 else sum(percentuais)
-                            
-                            if len(estados_selecionados) < len(estados_disponiveis):
-                                if len(estados_selecionados) == 1:
-                                    # Análise de estado único
-                                    st.info(f"""
-                                    **📊 Perfil de Entregas - {estados_selecionados[0]}:**
-                                    - **Faixa principal**: {faixa_principal} ({pct_principal:.1f}%)
-                                    - **Concentração**: Top 3 faixas representam {concentracao_top3:.1f}% das entregas
-                                    - **Diversificação**: {len(faixas)} faixas de peso diferentes atendidas
-                                    """)
-                                else:
-                                    # Análise de múltiplos estados
-                                    st.info(f"""
-                                    **📊 Perfil de Entregas - {len(estados_selecionados)} Estados:**
-                                    - **Estados**: {', '.join(estados_selecionados[:5])}{'...' if len(estados_selecionados) > 5 else ''}
-                                    - **Faixa principal**: {faixa_principal} ({pct_principal:.1f}%)
-                                    - **Concentração**: Top 3 faixas representam {concentracao_top3:.1f}% das entregas
-                                    - **Diversificação**: {len(faixas)} faixas de peso diferentes
-                                    """)
-                                
-                                # Recomendações baseadas na faixa principal
-                                if "0 a 10" in faixa_principal or "até 20" in faixa_principal:
-                                    st.success("✈️ **Perfil Leve**: Ideal para transportadoras expressas e aéreas")
-                                elif "acima de 100" in faixa_principal or "até 75" in faixa_principal:
-                                    st.warning("🚛 **Perfil Pesado**: Requer transportadoras especializadas em carga")
-                                else:
-                                    st.info("📦 **Perfil Médio**: Adequado para transportadoras convencionais")
-                            else:
-                                st.info(f"""
-                                **📊 Perfil Geral Nacional:**
-                                - **Faixa predominante**: {faixa_principal} ({pct_principal:.1f}%)
-                                - **Concentração nacional**: {concentracao_top3:.1f}% em 3 principais faixas
-                                - **Diversidade logística**: {len(faixas)} faixas atendidas nacionalmente
-                                """)
-                        else:
-                            st.info("📊 Dados de faixa de peso não disponíveis para o estado selecionado")
-                    else:
-                        st.info("📊 Dados insuficientes para análise de faixa de peso")
-                else:
-                    st.info("📊 Colunas necessárias (Estado Destino, Faixa de Peso) não disponíveis")
-            
-            with tab2:
-                st.markdown("### 🌎 Análise por Região")
-                
-                if all(col in sla.columns for col in ['Região', 'Faixa de Peso']):
-                    # Filtro por região (multiselect)
-                    regioes_disponiveis = sorted(sla['Região'].dropna().unique().tolist())
-                    
-                    regioes_selecionadas = st.multiselect(
-                        "🌎 Selecione as Regiões para Análise:",
-                        options=regioes_disponiveis,
-                        default=regioes_disponiveis,  # Todas selecionadas por padrão
-                        key="filtro_peso_regiao",
-                        help="Selecione uma ou mais regiões. Vazio = todas as regiões."
-                    )
-                    
-                    # Se nenhuma selecionada, usar todas
-                    if not regioes_selecionadas:
-                        regioes_selecionadas = regioes_disponiveis
-                    
-                    # Aplicar filtro multiselect
-                    if len(regioes_selecionadas) < len(regioes_disponiveis):
-                        dados_filtrados_regiao = sla[sla['Região'].isin(regioes_selecionadas)].copy()
-                        titulo_regiao = f"Regiões: {', '.join(regioes_selecionadas[:3])}" + ("..." if len(regioes_selecionadas) > 3 else "")
-                    else:
-                        dados_filtrados_regiao = sla.copy()
-                        titulo_regiao = "TODAS"
-                    
-                    if not dados_filtrados_regiao.empty and 'Faixa de Peso' in dados_filtrados_regiao.columns:
-                        # Calcular distribuição por faixa de peso por região
-                        faixa_peso_counts_regiao = dados_filtrados_regiao['Faixa de Peso'].value_counts()
-                        total_entregas_regiao = len(dados_filtrados_regiao)
-                        
-                        if not faixa_peso_counts_regiao.empty:
-                            # Preparar dados para o gráfico de pizza
-                            faixas_regiao = faixa_peso_counts_regiao.index.tolist()
-                            percentuais_regiao = (faixa_peso_counts_regiao.values / total_entregas_regiao * 100).round(1)
-                            
-                            col1, col2 = st.columns([2, 1])
-                            
-                            with col1:
-                                # Criar gráfico de barras horizontais para região
-                                fig_barras_regiao = px.bar(
-                                    x=faixa_peso_counts_regiao.values,
-                                    y=faixa_peso_counts_regiao.index,
-                                    orientation='h',
-                                    title=f"🎯 Distribuição por Faixa de Peso - {titulo_regiao}",
-                                    labels={'x': 'Quantidade de Entregas', 'y': 'Faixa de Peso'},
-                                    color=faixa_peso_counts_regiao.values,
-                                    color_continuous_scale='jet'
-                                )
-                                
-                                fig_barras_regiao.update_traces(
-                                    text=[f'{val} ({(val/total_entregas_regiao*100):.1f}%)' for val in faixa_peso_counts_regiao.values],
-                                    textposition='outside',
-                                    textfont=dict(color='black', size=10, family='Arial Black'),
-                                    hovertemplate='<b>%{y}</b><br>' +
-                                                  'Quantidade: %{x}<br>' +
-                                                  'Percentual: %{text}<br>' +
-                                                  '<extra></extra>'
-                                )
-                                
-                                fig_barras_regiao.update_layout(
-                                    height=500,
-                                    showlegend=False,
-                                    coloraxis_showscale=False,
-                                    title=dict(
-                                        x=0.5,
-                                        font=dict(size=14, family="Arial Black")
-                                    ),
-                                    plot_bgcolor='rgba(0,0,0,0)',
-                                    paper_bgcolor='rgba(0,0,0,0)',
-                                    xaxis=dict(showgrid=True, gridwidth=1, gridcolor='LightGray'),
-                                    yaxis=dict(showgrid=False),
-                                    margin=dict(l=20, r=80, t=60, b=20)
-                                )
-                                
-                                st.plotly_chart(fig_barras_regiao, use_container_width=True, key="faixa_peso_regiao")
-                            
-                            with col2:
-                                # Métricas complementares para região
-                                st.markdown("### 📊 Estatísticas Regionais")
-                                
-                                # Faixa predominante da região
-                                faixa_principal_regiao = faixa_peso_counts_regiao.index[0]
-                                pct_principal_regiao = percentuais_regiao[list(faixas_regiao).index(faixa_principal_regiao)]
-                                
-                                st.metric("🎯 Faixa Predominante", faixa_principal_regiao)
-                                st.metric("📊 Participação", f"{pct_principal_regiao:.1f}%")
-                                st.metric("📦 Total de Entregas", f"{total_entregas_regiao:,}".replace(",", "."))
-                                
-                                # Informações adicionais da região
-                                if 'Peso Bruto NF' in dados_filtrados_regiao.columns:
-                                    peso_medio_regiao = dados_filtrados_regiao['Peso Bruto NF'].mean()
-                                    if not pd.isna(peso_medio_regiao):
-                                        st.metric("⚖️ Peso Médio", f"{peso_medio_regiao:.1f} kg")
-                                
-                                # Estados da região (se não for "TODAS")
-                                if len(regioes_selecionadas) < len(regioes_disponiveis) and 'Estado Destino' in dados_filtrados_regiao.columns:
-                                    estados_na_regiao = dados_filtrados_regiao['Estado Destino'].nunique()
-                                    st.metric("🗺️ Estados Atendidos", estados_na_regiao)
-                                
-                                # Top 3 faixas da região
-                                st.markdown("#### 🏆 Top 3 Faixas")
-                                for i, (faixa, count) in enumerate(faixa_peso_counts_regiao.head(3).items(), 1):
-                                    pct = (count / total_entregas_regiao * 100)
-                                    st.write(f"**{i}º** {faixa}: {pct:.1f}%")
-                            
-                            # Tabela detalhada da região
-                            with st.expander(f"📋 Distribuição Detalhada - {titulo_regiao}"):
-                                # Criar tabela com dados completos da região
-                                tabela_faixas_regiao = pd.DataFrame({
-                                    'Faixa de Peso': faixa_peso_counts_regiao.index,
-                                    'Quantidade': faixa_peso_counts_regiao.values,
-                                    'Percentual (%)': percentuais_regiao
-                                })
-                                
-                                # Ordenar por quantidade (maior para menor)
-                                tabela_faixas_regiao = tabela_faixas_regiao.sort_values('Quantidade', ascending=False)
-                                
-                                st.dataframe(
-                                    tabela_faixas_regiao,
-                                    use_container_width=True,
-                                    hide_index=True,
-                                    height=300
-                                )
-                            
-                            # Insights automáticos da região
-                            st.markdown("### 💡 Insights da Análise Regional")
-                            
-                            # Análise de concentração da região
-                            concentracao_top3_regiao = sum(percentuais_regiao[:3]) if len(percentuais_regiao) >= 3 else sum(percentuais_regiao)
-                            
-                            if len(regioes_selecionadas) < len(regioes_disponiveis):
-                                if len(regioes_selecionadas) == 1:
-                                    # Análise de região única
-                                    st.info(f"""
-                                    **🌎 Perfil Regional - {regioes_selecionadas[0]}:**
-                                    - **Faixa principal**: {faixa_principal_regiao} ({pct_principal_regiao:.1f}%)
-                                    - **Concentração regional**: Top 3 faixas representam {concentracao_top3_regiao:.1f}% das entregas
-                                    - **Variedade logística**: {len(faixas_regiao)} faixas de peso diferentes
-                                    """)
-                                else:
-                                    # Análise de múltiplas regiões
-                                    st.info(f"""
-                                    **🌎 Perfil Regional - {len(regioes_selecionadas)} Regiões:**
-                                    - **Regiões**: {', '.join(regioes_selecionadas)}
-                                    - **Faixa principal**: {faixa_principal_regiao} ({pct_principal_regiao:.1f}%)
-                                    - **Concentração**: Top 3 faixas representam {concentracao_top3_regiao:.1f}% das entregas
-                                    - **Variedade logística**: {len(faixas_regiao)} faixas de peso diferentes
-                                    """)
-                                
-                                # Recomendações baseadas na faixa principal da região
-                                if "0 a 10" in faixa_principal_regiao or "até 20" in faixa_principal_regiao:
-                                    st.success("✈️ **Perfil Leve**: Adequada para hub de distribuição expressa")
-                                elif "acima de 100" in faixa_principal_regiao or "até 75" in faixa_principal_regiao:
-                                    st.warning("🚛 **Perfil Pesado**: Necessita infraestrutura robusta para carga")
-                                else:
-                                    st.info("📦 **Perfil Equilibrado**: Demanda logística diversificada")
-                            else:
-                                st.info(f"""
-                                **🌎 Perfil Nacional por Regiões:**
-                                - **Faixa predominante**: {faixa_principal_regiao} ({pct_principal_regiao:.1f}%)
-                                - **Concentração nacional**: {concentracao_top3_regiao:.1f}% em 3 principais faixas
-                                - **Diversidade Brasil**: {len(faixas_regiao)} faixas atendidas em todas as regiões
-                                """)
-                        else:
-                            st.info("📊 Dados de faixa de peso não disponíveis para a região selecionada")
-                    else:
-                        st.info("📊 Dados insuficientes para análise de faixa de peso por região")
-                else:
-                    st.info("📊 Colunas necessárias (Região, Faixa de Peso) não disponíveis")
-            
-            # Nona linha - Volume mensal geral
-            if 'Mês Nota' in sla.columns:
-                st.subheader("📊 Volume Geral de Entregas por Mês")
-                
-                mensal = sla['Mês Nota'].value_counts()
-                mensal_ordenado = ordenar_meses(mensal)
-                
-                # Ajustar posição do texto baseado no tamanho dos valores
-                posicoes, cores_texto = ajustar_posicao_texto(mensal_ordenado.values.tolist())
-                
-                fig_mensal = px.bar(
-                    x=mensal_ordenado.index,
-                    y=mensal_ordenado.values,
-                    title="Volume Total de NFs por Mês",
-                    labels={'x': 'Mês', 'y': 'Quantidade de NFs'},
-                    color=mensal_ordenado.values,
-                    color_continuous_scale='Blues',
-                    text=mensal_ordenado.values
-                )
-                fig_mensal.update_layout(height=300, showlegend=False, coloraxis_showscale=False)
-                
-                # Aplicar posições de texto inteligentes
-                if len(set(posicoes)) == 1:  # Se todas têm a mesma posição
-                    fig_mensal.update_traces(
-                        textposition=posicoes[0],
-                        textfont=dict(color=cores_texto[0], size=11, family='Arial Black'),
-                        hovertemplate='<b>%{x}</b><br>Volume: %{y} NFs<extra></extra>'
-                    )
-                else:  # Posições mistas - usar auto
-                    fig_mensal.update_traces(
-                        textposition='auto',
-                        textfont=dict(color='black', size=11, family='Arial Black'),
-                        hovertemplate='<b>%{x}</b><br>Volume: %{y} NFs<extra></extra>'
-                    )
-                st.plotly_chart(fig_mensal, use_container_width=True, key="volume_mensal_operacional")
                 
     # ===== ABA 5: BUSCA NF =====
     with tab5:
