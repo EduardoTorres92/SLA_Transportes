@@ -452,12 +452,13 @@ if sla is not None:
             # Calcular métricas principais
             total_nfs = len(sla)
             
-            # Taxa de SLA (usar apenas Status = 'Entregue no prazo' e 'Entregue atrasada')
+            # Taxa de SLA (usar apenas Status que contenham 'no prazo' e 'atrasada')
             try:
                 if 'Status' in sla.columns:
-                    status_validos = ['Entregue no prazo', 'Entregue atrasada']
-                    entregas_realizadas = sla[sla['Status'].isin(status_validos)]
-                    entregas_no_prazo = len(entregas_realizadas[entregas_realizadas['Status'] == 'Entregue no prazo'])
+                    mask_prazo = sla['Status'].str.contains('no prazo', case=False, na=False)
+                    mask_atrasada = sla['Status'].str.contains('atrasada', case=False, na=False)
+                    entregas_realizadas = sla[mask_prazo | mask_atrasada]
+                    entregas_no_prazo = len(entregas_realizadas[entregas_realizadas['Status'].str.contains('no prazo', case=False, na=False)])
                     taxa_sla = (entregas_no_prazo / len(entregas_realizadas) * 100) if len(entregas_realizadas) > 0 else 0
                 else:
                     taxa_sla = 0
@@ -934,17 +935,32 @@ if sla is not None:
         st.markdown("Análise detalhada da performance de entrega por transportadora e status.")
         
         if all(col in sla.columns for col in ['Transportador', 'Status']):
+            # Debug: Mostrar valores únicos da coluna Status
+            status_unicos = sla['Status'].value_counts()
+            st.write("**DEBUG - Valores únicos na coluna Status:**")
+            st.write(status_unicos)
+            
             # Filtrar apenas entregas com status específicos conforme solicitado
-            status_validos = ['Entregue no prazo', 'Entregue atrasada']
-            entregas_realizadas = sla[sla['Status'].isin(status_validos)].copy()
+            # Buscar por valores que contenham as palavras-chave
+            mask_prazo = sla['Status'].str.contains('no prazo', case=False, na=False)
+            mask_atrasada = sla['Status'].str.contains('atrasada', case=False, na=False)
+            entregas_realizadas = sla[mask_prazo | mask_atrasada].copy()
             
             if not entregas_realizadas.empty:
                 # Usar a coluna Status original para o cálculo de performance
-                # Padronizar os nomes dos status para o agrupamento
-                entregas_realizadas['Status_Entrega'] = entregas_realizadas['Status'].replace({
-                    'Entregue no prazo': 'Entregue no Prazo',
-                    'Entregue atrasada': 'Entregue Atrasada'
-                })
+                # Classificar baseado no conteúdo do status
+                def classificar_status(status):
+                    if pd.isna(status):
+                        return 'Outros'
+                    status_lower = str(status).lower()
+                    if 'no prazo' in status_lower:
+                        return 'Entregue no Prazo'
+                    elif 'atrasada' in status_lower:
+                        return 'Entregue Atrasada'
+                    else:
+                        return 'Outros'
+                
+                entregas_realizadas['Status_Entrega'] = entregas_realizadas['Status'].apply(classificar_status)
                 
                 # Agrupar por transportadora e status de entrega
                 performance_transp = entregas_realizadas.groupby(['Transportador', 'Status_Entrega']).size().unstack(fill_value=0)
