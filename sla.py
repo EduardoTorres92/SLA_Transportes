@@ -1081,35 +1081,62 @@ if sla is not None:
                             if 'Unid Negoc' in dados_receita.columns:
                                 st.markdown("### 🏢 Análise por Unidade de Negócio")
                                 
-                                # Soma dos atendimentos: Unid Negoc vs Seq. De Fat
-                                tabela_cruzada = dados_receita.pivot_table(
-                                    index='Unid Negoc', 
-                                    columns='Seq. De Fat', 
-                                    values='Seq. De Fat', 
-                                    aggfunc='sum', 
-                                    fill_value=0,
-                                    margins=True
-                                )
+                                # Criar uma análise mais simples agrupando por Unid Negoc
+                                atendimentos_por_bu = dados_receita.groupby('Unid Negoc')['Seq. De Fat'].sum().sort_values(ascending=False)
                                 
-                                # Calcular percentuais por linha (por unidade de negócio)
-                                tabela_percentual = dados_receita.pivot_table(
-                                    index='Unid Negoc', 
-                                    columns='Seq. De Fat', 
-                                    values='Seq. De Fat', 
-                                    aggfunc='sum', 
-                                    fill_value=0,
-                                    normalize='index'
-                                ) * 100
-                                
-                                # Exibir soma de atendimentos
-                                with st.expander("📊 Total de Atendimentos por Unidade de Negócio"):
-                                    st.dataframe(tabela_cruzada, use_container_width=True)
-                                
-                                # Exibir percentuais
-                                with st.expander("📈 Percentuais de Atendimentos por Unidade de Negócio"):
-                                    # Formatar percentuais
-                                    tabela_perc_formatada = tabela_percentual.round(2).astype(str) + '%'
-                                    st.dataframe(tabela_perc_formatada, use_container_width=True)
+                                if not atendimentos_por_bu.empty:
+                                    # Calcular percentuais
+                                    total_bu = atendimentos_por_bu.sum()
+                                    percentuais_bu = (atendimentos_por_bu / total_bu * 100).round(2)
+                                    
+                                    # Criar DataFrame para exibição
+                                    tabela_bu = pd.DataFrame({
+                                        'Unidade de Negócio': atendimentos_por_bu.index,
+                                        'Total de Atendimentos': atendimentos_por_bu.values,
+                                        'Percentual': [f"{pct:.2f}%" for pct in percentuais_bu.values]
+                                    })
+                                    
+                                    # Gráfico por BU
+                                    if len(atendimentos_por_bu) <= 15:
+                                        fig_bu = px.bar(
+                                            x=atendimentos_por_bu.values,
+                                            y=atendimentos_por_bu.index,
+                                            orientation='h',
+                                            title="🏢 Atendimentos por Unidade de Negócio",
+                                            labels={'x': 'Total de Atendimentos', 'y': 'Unidade de Negócio'},
+                                            text=atendimentos_por_bu.values
+                                        )
+                                        fig_bu.update_traces(
+                                            textposition='outside',
+                                            hovertemplate='<b>%{y}</b><br>Atendimentos: %{x}<br>Percentual: %{customdata:.2f}%<extra></extra>',
+                                            customdata=percentuais_bu.values
+                                        )
+                                        fig_bu.update_layout(height=400, showlegend=False)
+                                        st.plotly_chart(fig_bu, use_container_width=True)
+                                    
+                                    # Tabela detalhada por BU
+                                    st.dataframe(tabela_bu, use_container_width=True, hide_index=True)
+                                    
+                                    # Análise detalhada por BU e Seq
+                                    with st.expander("📊 Detalhamento por BU e Sequência"):
+                                        try:
+                                            # Usar crosstab mais simples
+                                            tabela_detalhada = pd.crosstab(
+                                                dados_receita['Unid Negoc'], 
+                                                dados_receita['Seq. De Fat'], 
+                                                values=dados_receita['Seq. De Fat'],
+                                                aggfunc='sum',
+                                                fill_value=0
+                                            )
+                                            st.dataframe(tabela_detalhada, use_container_width=True)
+                                        except Exception as e:
+                                            st.warning("⚠️ Não foi possível gerar a análise detalhada por sequência")
+                                            # Mostrar análise alternativa simples
+                                            bu_seq_summary = dados_receita.groupby(['Unid Negoc', 'Seq. De Fat'])['Seq. De Fat'].sum().reset_index()
+                                            bu_seq_summary.columns = ['Unidade de Negócio', 'Seq. De Fat', 'Total Atendimentos']
+                                            st.dataframe(bu_seq_summary, use_container_width=True, hide_index=True)
+                                else:
+                                    st.info("📊 Nenhum dado de Unidade de Negócio disponível")
                             
                             # Insights automáticos
                             st.markdown("### 💡 Insights da Análise")
