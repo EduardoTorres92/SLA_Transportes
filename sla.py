@@ -363,6 +363,20 @@ if sla is not None:
         data_inicio = None
         data_fim = None
     
+    # Filtro por Mês de Entrega (específico para análise de performance)
+    meses_entrega_selecionados = []
+    if 'Mês Entrega' in sla.columns:
+        meses_disponiveis = sorted(sla['Mês Entrega'].dropna().unique().tolist())
+        meses_entrega_selecionados = st.sidebar.multiselect(
+            "📅 Mês de Entrega:",
+            options=meses_disponiveis,
+            default=[],  # Todas selecionadas por padrão
+            help="Filtro específico para análise de performance. Vazio = todos os meses."
+        )
+        # Se nenhuma selecionada, usar todas
+        if not meses_entrega_selecionados:
+            meses_entrega_selecionados = meses_disponiveis
+
     # Filtro por Transportadora (multiselect)
     if 'Transportador' in sla.columns:
         transportadoras_disponiveis = sorted(sla['Transportador'].dropna().unique().tolist())
@@ -398,6 +412,10 @@ if sla is not None:
     if transportadoras_selecionadas and len(transportadoras_selecionadas) < len(transportadoras_disponiveis if 'Transportador' in sla.columns else []):
         sla_filtrado = sla_filtrado[sla_filtrado['Transportador'].isin(transportadoras_selecionadas)]
     
+    # Aplicar filtro de mês de entrega
+    if meses_entrega_selecionados and len(meses_entrega_selecionados) < len(meses_disponiveis if 'Mês Entrega' in sla.columns else []):
+        sla_filtrado = sla_filtrado[sla_filtrado['Mês Entrega'].isin(meses_entrega_selecionados)]
+    
     # Mostrar informações dos dados filtrados
     registros_filtrados = len(sla_filtrado)
     if registros_filtrados != len(sla):
@@ -426,6 +444,13 @@ if sla is not None:
                 st.sidebar.markdown(f"🚚 **Transportadoras:** {', '.join(transportadoras_selecionadas)}")
             else:
                 st.sidebar.markdown(f"🚚 **Transportadoras:** {len(transportadoras_selecionadas)} selecionadas")
+        
+        # Meses de entrega selecionados
+        if meses_entrega_selecionados and len(meses_entrega_selecionados) < len(meses_disponiveis if 'Mês Entrega' in sla.columns else []):
+            if len(meses_entrega_selecionados) <= 3:
+                st.sidebar.markdown(f"📅 **Meses Entrega:** {', '.join(meses_entrega_selecionados)}")
+            else:
+                st.sidebar.markdown(f"📅 **Meses Entrega:** {len(meses_entrega_selecionados)} selecionados")
         
         if registros_filtrados == 0:
             st.warning("⚠️ Nenhum registro encontrado com os filtros aplicados. Ajuste os filtros para visualizar dados.")
@@ -936,11 +961,33 @@ if sla is not None:
         st.info("ℹ️ **Importante:** Esta análise respeita os filtros aplicados no menu lateral (BU, Data, Transportadora).")
         
         if all(col in sla.columns for col in ['Transportador', 'Status']):
+            # DEBUG: Mostrar informações sobre filtros aplicados
+            st.write("### 🔍 DEBUG - Informações dos Filtros Aplicados")
+            st.write(f"**Total de registros após filtros:** {len(sla)}")
+            
+            # Verificar se existe coluna de mês
+            if 'Mês Entrega' in sla.columns:
+                st.write("**Distribuição por Mês Entrega (dados filtrados):**")
+                meses_distribuicao = sla['Mês Entrega'].value_counts().sort_index()
+                st.write(meses_distribuicao)
+                
+                if len(meses_distribuicao) == 1:
+                    mes_analisado = meses_distribuicao.index[0]
+                    st.info(f"🎯 **Analisando especificamente o mês: {mes_analisado}**")
+                elif len(meses_distribuicao) <= 3:
+                    meses_analisados = ", ".join(meses_distribuicao.index.tolist())
+                    st.info(f"🎯 **Analisando os meses: {meses_analisados}**")
+            
             # Filtrar apenas entregas com status específicos conforme solicitado (DADOS FILTRADOS)
             # Buscar especificamente por status que começam com "Entregue"
             mask_prazo = sla['Status'].str.contains('entregue.*no prazo', case=False, na=False, regex=True)
             mask_atrasada = sla['Status'].str.contains('entregue.*atrasada', case=False, na=False, regex=True)
             entregas_realizadas = sla[mask_prazo | mask_atrasada].copy()
+            
+            st.write(f"**Registros com status válidos (Entregue):** {len(entregas_realizadas)}")
+            if not entregas_realizadas.empty:
+                st.write("**Status válidos encontrados:**")
+                st.write(entregas_realizadas['Status'].value_counts())
             
             if not entregas_realizadas.empty:
                 # Usar a coluna Status original para o cálculo de performance
@@ -963,6 +1010,10 @@ if sla is not None:
                 
                 # Calcular percentuais
                 performance_transp_pct = performance_transp.div(performance_transp.sum(axis=1), axis=0) * 100
+                
+                # DEBUG: Mostrar comparação com sua tabela
+                st.write("### 📊 Percentuais Calculados vs Sua Tabela")
+                st.dataframe(performance_transp_pct.round(1))
                 
                 # Filtrar apenas transportadoras com pelo menos 10 entregas para análise consistente
                 total_entregas = performance_transp.sum(axis=1)
