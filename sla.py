@@ -209,11 +209,11 @@ def load_data_from_upload(uploaded_file):
         st.error(f"Erro ao carregar o arquivo: {e}")
         return None
 
-# ===== SISTEMA DE UPLOAD DE ARQUIVO =====
-st.header("📁 Carregamento da Base de Dados")
-st.markdown("Faça upload do arquivo Excel com os dados de SLA para análise.")
+# ===== SISTEMA DE UPLOAD DE ARQUIVO (SIDEBAR) =====
+st.sidebar.header("📁 Carregamento de Dados")
+st.sidebar.markdown("Faça upload do arquivo Excel:")
 
-uploaded_file = st.file_uploader(
+uploaded_file = st.sidebar.file_uploader(
     "Selecione o arquivo Excel (.xlsx)",
     type=['xlsx', 'xls'],
     help="Arquivo deve conter uma planilha chamada 'Base' com os dados de SLA"
@@ -223,17 +223,17 @@ uploaded_file = st.file_uploader(
 sla = None
 
 if uploaded_file is not None:
-    # Mostrar informações do arquivo carregado
-    st.success(f"✅ Arquivo carregado: **{uploaded_file.name}** ({uploaded_file.size} bytes)")
-    
     # Carregar dados com spinner
     with st.spinner("Processando arquivo... Por favor, aguarde."):
         sla = load_data_from_upload(uploaded_file)
     
     if sla is not None:
-        st.success(f"🎯 Dados processados com sucesso! Total de **{len(sla):,}** registros encontrados")
+        # Mostrar validação no sidebar
+        st.sidebar.markdown("---")
+        st.sidebar.success("✅ Dados carregados!")
+        st.sidebar.metric("📊 Registros", f"{len(sla):,}")
         
-        # Mostrar preview e validação dos dados
+        # Mostrar preview e validação completa no main
         with st.expander("👀 Visualizar Preview e Validação dos Dados"):
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -301,12 +301,12 @@ if uploaded_file is not None:
         st.stop()
 else:
     # Instruções para o usuário
-    st.info("👆 Faça upload do arquivo Excel para começar a análise")
-   
+    st.info("👈 Faça upload do arquivo Excel no menu lateral para começar a análise")
     st.stop()
 
 if sla is not None:
     # ===== FILTROS GLOBAIS NO SIDEBAR =====
+    st.sidebar.markdown("---")
     st.sidebar.header("🔧 Filtros Globais")
     st.sidebar.markdown("Filtros aplicados a todas as análises:")
     
