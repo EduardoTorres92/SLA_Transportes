@@ -452,14 +452,15 @@ if sla is not None:
             # Calcular métricas principais
             total_nfs = len(sla)
             
-            # Taxa de SLA (assumindo que entregas no prazo são as que têm data de entrega <= previsão)
+            # Taxa de SLA (usar apenas Status = 'Entregue no prazo' e 'Entregue atrasada')
             try:
-                sla['Data de Entrega'] = pd.to_datetime(sla['Data de Entrega'], errors='coerce')
-                sla['Previsão de Entrega'] = pd.to_datetime(sla['Previsão de Entrega'], errors='coerce')
-                
-                entregas_realizadas = sla.dropna(subset=['Data de Entrega', 'Previsão de Entrega'])
-                entregas_no_prazo = len(entregas_realizadas[entregas_realizadas['Data de Entrega'] <= entregas_realizadas['Previsão de Entrega']])
-                taxa_sla = (entregas_no_prazo / len(entregas_realizadas) * 100) if len(entregas_realizadas) > 0 else 0
+                if 'Status' in sla.columns:
+                    status_validos = ['Entregue no prazo', 'Entregue atrasada']
+                    entregas_realizadas = sla[sla['Status'].isin(status_validos)]
+                    entregas_no_prazo = len(entregas_realizadas[entregas_realizadas['Status'] == 'Entregue no prazo'])
+                    taxa_sla = (entregas_no_prazo / len(entregas_realizadas) * 100) if len(entregas_realizadas) > 0 else 0
+                else:
+                    taxa_sla = 0
             except:
                 taxa_sla = 0
                 
@@ -932,21 +933,18 @@ if sla is not None:
         st.header("🎯 Performance de SLA")
         st.markdown("Análise detalhada da performance de entrega por transportadora e status.")
         
-        if all(col in sla.columns for col in ['Transportador', 'Data de Entrega', 'Previsão de Entrega']):
-            # Filtrar apenas entregas realizadas (com data de entrega)
-            entregas_realizadas = sla.dropna(subset=['Data de Entrega', 'Previsão de Entrega', 'Transportador'])
+        if all(col in sla.columns for col in ['Transportador', 'Status']):
+            # Filtrar apenas entregas com status específicos conforme solicitado
+            status_validos = ['Entregue no prazo', 'Entregue atrasada']
+            entregas_realizadas = sla[sla['Status'].isin(status_validos)].copy()
             
             if not entregas_realizadas.empty:
-                # Garantir que as datas estão no formato correto
-                entregas_realizadas = entregas_realizadas.copy()
-                entregas_realizadas['Data de Entrega'] = pd.to_datetime(entregas_realizadas['Data de Entrega'], errors='coerce')
-                entregas_realizadas['Previsão de Entrega'] = pd.to_datetime(entregas_realizadas['Previsão de Entrega'], errors='coerce')
-                
-                # Classificar entregas como no prazo ou atrasadas
-                entregas_realizadas['Status_Entrega'] = entregas_realizadas.apply(
-                    lambda row: 'Entregue no Prazo' if row['Data de Entrega'] <= row['Previsão de Entrega'] else 'Entregue Atrasada',
-                    axis=1
-                )
+                # Usar a coluna Status original para o cálculo de performance
+                # Padronizar os nomes dos status para o agrupamento
+                entregas_realizadas['Status_Entrega'] = entregas_realizadas['Status'].replace({
+                    'Entregue no prazo': 'Entregue no Prazo',
+                    'Entregue atrasada': 'Entregue Atrasada'
+                })
                 
                 # Agrupar por transportadora e status de entrega
                 performance_transp = entregas_realizadas.groupby(['Transportador', 'Status_Entrega']).size().unstack(fill_value=0)
