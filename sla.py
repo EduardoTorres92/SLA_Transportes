@@ -933,14 +933,14 @@ if sla is not None:
     with tab2:
         st.header("🎯 Performance de SLA")
         st.markdown("Análise detalhada da performance de entrega por transportadora e status.")
-        st.info("ℹ️ **Importante:** Esta análise usa os dados originais (sem aplicar filtros do menu lateral) para garantir consistência com relatórios externos.")
+        st.info("ℹ️ **Importante:** Esta análise respeita os filtros aplicados no menu lateral (BU, Data, Transportadora).")
         
-        if all(col in sla_original.columns for col in ['Transportador', 'Status']):
-            # Filtrar apenas entregas com status específicos conforme solicitado (DADOS ORIGINAIS)
+        if all(col in sla.columns for col in ['Transportador', 'Status']):
+            # Filtrar apenas entregas com status específicos conforme solicitado (DADOS FILTRADOS)
             # Buscar especificamente por status que começam com "Entregue"
-            mask_prazo = sla_original['Status'].str.contains('entregue.*no prazo', case=False, na=False, regex=True)
-            mask_atrasada = sla_original['Status'].str.contains('entregue.*atrasada', case=False, na=False, regex=True)
-            entregas_realizadas = sla_original[mask_prazo | mask_atrasada].copy()
+            mask_prazo = sla['Status'].str.contains('entregue.*no prazo', case=False, na=False, regex=True)
+            mask_atrasada = sla['Status'].str.contains('entregue.*atrasada', case=False, na=False, regex=True)
+            entregas_realizadas = sla[mask_prazo | mask_atrasada].copy()
             
             if not entregas_realizadas.empty:
                 # Usar a coluna Status original para o cálculo de performance
