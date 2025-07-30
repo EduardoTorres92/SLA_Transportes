@@ -379,6 +379,21 @@ if sla is not None:
     else:
         transportadoras_selecionadas = []
     
+    # Filtro por Status (multiselect)
+    if 'Status' in sla.columns:
+        status_disponiveis = sorted(sla['Status'].dropna().unique().tolist())
+        status_selecionados = st.sidebar.multiselect(
+            "📋 Status:",
+            options=status_disponiveis,
+            default=[],  # Todos selecionados por padrão
+            help="Selecione um ou mais status. Vazio = todos os status."
+        )
+        # Se nenhum selecionado, usar todos
+        if not status_selecionados:
+            status_selecionados = status_disponiveis
+    else:
+        status_selecionados = []
+    
     # Aplicar filtros aos dados
     # Manter uma cópia dos dados originais para a busca de nota fiscal
     sla_original = sla.copy()
@@ -398,6 +413,10 @@ if sla is not None:
     # Aplicar filtro de transportadora (multiselect)
     if transportadoras_selecionadas and len(transportadoras_selecionadas) < len(transportadoras_disponiveis if 'Transportador' in sla.columns else []):
         sla_filtrado = sla_filtrado[sla_filtrado['Transportador'].isin(transportadoras_selecionadas)]
+    
+    # Aplicar filtro de status (multiselect)
+    if status_selecionados and len(status_selecionados) < len(status_disponiveis if 'Status' in sla.columns else []):
+        sla_filtrado = sla_filtrado[sla_filtrado['Status'].isin(status_selecionados)]
     
     # Mostrar informações dos dados filtrados
     registros_filtrados = len(sla_filtrado)
@@ -427,6 +446,13 @@ if sla is not None:
                 st.sidebar.markdown(f"🚚 **Transportadoras:** {', '.join(transportadoras_selecionadas)}")
             else:
                 st.sidebar.markdown(f"🚚 **Transportadoras:** {len(transportadoras_selecionadas)} selecionadas")
+        
+        # Status selecionados
+        if status_selecionados and len(status_selecionados) < len(status_disponiveis if 'Status' in sla.columns else []):
+            if len(status_selecionados) <= 3:
+                st.sidebar.markdown(f"📋 **Status:** {', '.join(status_selecionados)}")
+            else:
+                st.sidebar.markdown(f"📋 **Status:** {len(status_selecionados)} selecionados")
         
         if registros_filtrados == 0:
             st.warning("⚠️ Nenhum registro encontrado com os filtros aplicados. Ajuste os filtros para visualizar dados.")
