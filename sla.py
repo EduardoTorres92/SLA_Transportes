@@ -136,6 +136,7 @@ def criar_timeline_entrega(row):
         dias_despacho = calcular_dias_corridos(dt_nota_calc, dt_saida_calc)
         duracao_despacho = f"{dias_despacho} dias" if dias_despacho is not None else None
     else:
+        dias_despacho = None
         duracao_despacho = None
     
     # 3. Previsão de Entrega - usar coluna Lead Time
