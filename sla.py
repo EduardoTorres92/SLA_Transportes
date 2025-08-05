@@ -1194,10 +1194,29 @@ if sla is not None:
                             for bu in pivot_percentual.columns:
                                 if bu != 'Total Geral':
                                     with st.expander(f"🏢 {bu}"):
+                                        # Obter principais ocorrências por sequência e BU
+                                        ocorrencias_por_seq = []
+                                        for seq in pivot_percentual.index:
+                                            if seq != 'Total Geral':
+                                                filtro = (dados_receita['Seq. De Fat'] == seq) & (dados_receita['Unid Negoc'] == bu)
+                                                dados_seq_bu = dados_receita[filtro]
+                                                if 'Ocorrência' in dados_seq_bu.columns and not dados_seq_bu.empty:
+                                                    ocorrencias_validas = dados_seq_bu[dados_seq_bu['Ocorrência'].notna() & (dados_seq_bu['Ocorrência'] != '')]
+                                                    if not ocorrencias_validas.empty:
+                                                        top_ocorrencia = ocorrencias_validas['Ocorrência'].value_counts().index[0]
+                                                        ocorrencias_por_seq.append(str(top_ocorrencia)[:30] + "..." if len(str(top_ocorrencia)) > 30 else str(top_ocorrencia))
+                                                    else:
+                                                        ocorrencias_por_seq.append("-")
+                                                else:
+                                                    ocorrencias_por_seq.append("-")
+                                            else:
+                                                ocorrencias_por_seq.append("-")
+                                        
                                         resumo_bu = pd.DataFrame({
                                             'Sequência': pivot_percentual.index,
                                             'Percentual': [f"{val:.2f}%" for val in pivot_percentual[bu]],
-                                            'Valor NF': [f"R$ {pivot_valor[bu][idx]:,.2f}" for idx in pivot_percentual.index]
+                                            'Valor NF': [f"R$ {pivot_valor[bu][idx]:,.2f}" for idx in pivot_percentual.index],
+                                            'Principal Ocorrência': ocorrencias_por_seq
                                         })
                                         
                                         st.dataframe(resumo_bu, use_container_width=True, hide_index=True)
@@ -1221,10 +1240,29 @@ if sla is not None:
                             for bu in pivot_contagem.columns:
                                 if bu != 'Total Geral':
                                     with st.expander(f"🏢 {bu}"):
+                                        # Obter principais ocorrências por sequência e BU (números absolutos)
+                                        ocorrencias_por_seq_abs = []
+                                        for seq in pivot_contagem.index:
+                                            if seq != 'Total Geral':
+                                                filtro = (dados_receita['Seq. De Fat'] == seq) & (dados_receita['Unid Negoc'] == bu)
+                                                dados_seq_bu = dados_receita[filtro]
+                                                if 'Ocorrência' in dados_seq_bu.columns and not dados_seq_bu.empty:
+                                                    ocorrencias_validas = dados_seq_bu[dados_seq_bu['Ocorrência'].notna() & (dados_seq_bu['Ocorrência'] != '')]
+                                                    if not ocorrencias_validas.empty:
+                                                        top_ocorrencia = ocorrencias_validas['Ocorrência'].value_counts().index[0]
+                                                        ocorrencias_por_seq_abs.append(str(top_ocorrencia)[:30] + "..." if len(str(top_ocorrencia)) > 30 else str(top_ocorrencia))
+                                                    else:
+                                                        ocorrencias_por_seq_abs.append("-")
+                                                else:
+                                                    ocorrencias_por_seq_abs.append("-")
+                                            else:
+                                                ocorrencias_por_seq_abs.append("-")
+                                        
                                         resumo_bu_abs = pd.DataFrame({
                                             'Sequência': pivot_contagem.index,
                                             'Quantidade de Notas': [f"{val:,}" for val in pivot_contagem[bu]],
-                                            'Valor NF': [f"R$ {pivot_valor[bu][idx]:,.2f}" for idx in pivot_contagem.index]
+                                            'Valor NF': [f"R$ {pivot_valor[bu][idx]:,.2f}" for idx in pivot_contagem.index],
+                                            'Principal Ocorrência': ocorrencias_por_seq_abs
                                         })
                                         
                                         st.dataframe(resumo_bu_abs, use_container_width=True, hide_index=True)
