@@ -1194,29 +1194,10 @@ if sla is not None:
                             for bu in pivot_percentual.columns:
                                 if bu != 'Total Geral':
                                     with st.expander(f"🏢 {bu}"):
-                                        # Obter principais ocorrências por sequência e BU
-                                        ocorrencias_por_seq = []
-                                        for seq in pivot_percentual.index:
-                                            if seq != 'Total Geral':
-                                                filtro = (dados_receita['Seq. De Fat'] == seq) & (dados_receita['Unid Negoc'] == bu)
-                                                dados_seq_bu = dados_receita[filtro]
-                                                if 'Ocorrência' in dados_seq_bu.columns and not dados_seq_bu.empty:
-                                                    ocorrencias_validas = dados_seq_bu[dados_seq_bu['Ocorrência'].notna() & (dados_seq_bu['Ocorrência'] != '')]
-                                                    if not ocorrencias_validas.empty:
-                                                        top_ocorrencia = ocorrencias_validas['Ocorrência'].value_counts().index[0]
-                                                        ocorrencias_por_seq.append(str(top_ocorrencia)[:30] + "..." if len(str(top_ocorrencia)) > 30 else str(top_ocorrencia))
-                                                    else:
-                                                        ocorrencias_por_seq.append("-")
-                                                else:
-                                                    ocorrencias_por_seq.append("-")
-                                            else:
-                                                ocorrencias_por_seq.append("-")
-                                        
                                         resumo_bu = pd.DataFrame({
                                             'Sequência': pivot_percentual.index,
                                             'Percentual': [f"{val:.2f}%" for val in pivot_percentual[bu]],
-                                            'Valor NF': [f"R$ {pivot_valor[bu][idx]:,.2f}" for idx in pivot_percentual.index],
-                                            'Principal Ocorrência': ocorrencias_por_seq
+                                            'Valor NF': [f"R$ {pivot_valor[bu][idx]:,.2f}" for idx in pivot_percentual.index]
                                         })
                                         
                                         st.dataframe(resumo_bu, use_container_width=True, hide_index=True)
@@ -1240,29 +1221,10 @@ if sla is not None:
                             for bu in pivot_contagem.columns:
                                 if bu != 'Total Geral':
                                     with st.expander(f"🏢 {bu}"):
-                                        # Obter principais ocorrências por sequência e BU (números absolutos)
-                                        ocorrencias_por_seq_abs = []
-                                        for seq in pivot_contagem.index:
-                                            if seq != 'Total Geral':
-                                                filtro = (dados_receita['Seq. De Fat'] == seq) & (dados_receita['Unid Negoc'] == bu)
-                                                dados_seq_bu = dados_receita[filtro]
-                                                if 'Ocorrência' in dados_seq_bu.columns and not dados_seq_bu.empty:
-                                                    ocorrencias_validas = dados_seq_bu[dados_seq_bu['Ocorrência'].notna() & (dados_seq_bu['Ocorrência'] != '')]
-                                                    if not ocorrencias_validas.empty:
-                                                        top_ocorrencia = ocorrencias_validas['Ocorrência'].value_counts().index[0]
-                                                        ocorrencias_por_seq_abs.append(str(top_ocorrencia)[:30] + "..." if len(str(top_ocorrencia)) > 30 else str(top_ocorrencia))
-                                                    else:
-                                                        ocorrencias_por_seq_abs.append("-")
-                                                else:
-                                                    ocorrencias_por_seq_abs.append("-")
-                                            else:
-                                                ocorrencias_por_seq_abs.append("-")
-                                        
                                         resumo_bu_abs = pd.DataFrame({
                                             'Sequência': pivot_contagem.index,
                                             'Quantidade de Notas': [f"{val:,}" for val in pivot_contagem[bu]],
-                                            'Valor NF': [f"R$ {pivot_valor[bu][idx]:,.2f}" for idx in pivot_contagem.index],
-                                            'Principal Ocorrência': ocorrencias_por_seq_abs
+                                            'Valor NF': [f"R$ {pivot_valor[bu][idx]:,.2f}" for idx in pivot_contagem.index]
                                         })
                                         
                                         st.dataframe(resumo_bu_abs, use_container_width=True, hide_index=True)
@@ -1622,6 +1584,122 @@ if sla is not None:
                                 value=tempo_total_formatado,
                                 help="Soma de: Faturamento + Despacho + Entrega (dias corridos)"
                             )
+                    
+                    # Seção de Dados de Ocorrência
+                    st.markdown("#### ⚠️ Dados de Ocorrência")
+                    
+                    # Verificar se existe a coluna de ocorrência e se há dados
+                    if 'Ocorrência' in row.index and pd.notna(row.get('Ocorrência')) and str(row.get('Ocorrência')).strip() != '':
+                        ocorrencia_texto = str(row.get('Ocorrência')).strip()
+                        
+                        # Verificar se a entrega foi realizada normalmente (no prazo)
+                        entrega_normal = False
+                        try:
+                            data_entrega = pd.to_datetime(row.get('Data de Entrega'), errors='coerce')
+                            previsao_entrega = pd.to_datetime(row.get('Previsão de Entrega'), errors='coerce')
+                            
+                            if pd.notna(data_entrega) and pd.notna(previsao_entrega):
+                                entrega_normal = data_entrega <= previsao_entrega
+                        except:
+                            entrega_normal = False
+                        
+                        # Definir cores baseadas no status da entrega
+                        if entrega_normal:
+                            # Verde para entrega normal
+                            cor_fundo = "#d4edda"
+                            cor_borda = "#28a745"
+                            cor_texto = "#155724"
+                            icone = "✅"
+                            titulo = "Entrega Realizada Normalmente"
+                        else:
+                            # Amarelo para problemas/atrasos
+                            cor_fundo = "#fff3cd"
+                            cor_borda = "#ffc107"
+                            cor_texto = "#856404"
+                            icone = "⚠️"
+                            titulo = "Ocorrência Registrada"
+                        
+                        # Exibir a ocorrência com formatação visual dinâmica
+                        ocorrencia_html = f"""
+                        <div style="
+                            margin: 10px 0;
+                            padding: 15px;
+                            background-color: {cor_fundo};
+                            border-left: 4px solid {cor_borda};
+                            border-radius: 8px;
+                            font-family: 'Source Sans Pro', sans-serif;
+                        ">
+                            <div style="
+                                display: flex;
+                                align-items: flex-start;
+                                margin-bottom: 8px;
+                            ">
+                                <div style="
+                                    font-size: 20px;
+                                    margin-right: 10px;
+                                    color: {cor_texto};
+                                    min-width: 25px;
+                                ">
+                                    {icone}
+                                </div>
+                                <div style="
+                                    font-weight: 600;
+                                    color: {cor_texto};
+                                    font-size: 14px;
+                                ">
+                                    {titulo}
+                                </div>
+                            </div>
+                            <div style="
+                                margin-left: 35px;
+                                color: {cor_texto};
+                                font-size: 13px;
+                                line-height: 1.4;
+                                background-color: rgba(255, 255, 255, 0.7);
+                                padding: 8px;
+                                border-radius: 4px;
+                            ">
+                                {ocorrencia_texto}
+                            </div>
+                        </div>
+                        """
+                        
+                        st.markdown(ocorrencia_html, unsafe_allow_html=True)
+                    else:
+                        # Exibir mensagem quando não há ocorrência
+                        sem_ocorrencia_html = f"""
+                        <div style="
+                            margin: 10px 0;
+                            padding: 15px;
+                            background-color: #d1edff;
+                            border-left: 4px solid #0084ff;
+                            border-radius: 8px;
+                            font-family: 'Source Sans Pro', sans-serif;
+                        ">
+                            <div style="
+                                display: flex;
+                                align-items: center;
+                            ">
+                                <div style="
+                                    font-size: 20px;
+                                    margin-right: 10px;
+                                    color: #0066cc;
+                                    min-width: 25px;
+                                ">
+                                    ✅
+                                </div>
+                                <div style="
+                                    color: #0066cc;
+                                    font-size: 14px;
+                                    font-weight: 500;
+                                ">
+                                    Nenhuma ocorrência registrada para esta nota fiscal
+                                </div>
+                            </div>
+                        </div>
+                        """
+                        
+                        st.markdown(sem_ocorrencia_html, unsafe_allow_html=True)
                     
                     # Separador entre resultados se houver múltiplas NFs
                     if len(resultado) > 1:
